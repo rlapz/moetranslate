@@ -1,9 +1,14 @@
 # moetranslate
 A simple language translator written in C
 
-## Currently support:
+## Currently Support:
 1. Google Translate API
 
+## How to Compile:
+
+```
+cc moestranslate.c -lcurl -o moetranslate
+```
 
 ## How to use:
 
@@ -22,7 +27,7 @@ A simple language translator written in C
 	more information.
 
 
-## Third party libraries
+## Third Party Libraries
 1. [curl](https://github.com/curl/curl)
 2. [jsmn](https://github.com/zserge/jsmn)
 
