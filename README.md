@@ -1,14 +1,18 @@
 # moetranslate
 A simple language translator written in C
 
-##Currently support:
+## Currently support:
 1. Google Translate API
 
 
-##How to use:
-`./moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"`
+## How to use:
 
-`[-b] (optional) means "Brief Mode" (only show simple output)`
+```
+./moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
+
+[-b] (optional) means "Brief Mode" (only show simple output)
+```
+
 
 1. Brief mode:
 	`./moetranslate en id -b "Hello world\!"`
@@ -22,5 +26,6 @@ A simple language translator written in C
 1. [curl](https://github.com/curl/curl)
 2. [jsmn](https://github.com/zserge/jsmn)
 
-##TODO:
-1. Add Yandex Translate API
+## TODO:
+1. Parse Full mode
+2. Add Yandex Translate API
