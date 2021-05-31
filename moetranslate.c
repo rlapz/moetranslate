@@ -95,7 +95,8 @@ full_mode(void)
 	curl_easy_cleanup(curl);
 }
 
-static char *url_parser(CURL *curl, int mode)
+static char *
+url_parser(CURL *curl, int mode)
 {
 	char *ret;
 	char *tmp;
@@ -109,7 +110,7 @@ static char *url_parser(CURL *curl, int mode)
 	ret = tmp;
 	strcat(ret, url_params[mode]);
 
-	/* create url escape */
+	/* convert TEXT to url escape */
 	curl_escape = curl_easy_escape(curl, lang.text, strlen(lang.text));
 
 	len_ret = strlen(ret);
