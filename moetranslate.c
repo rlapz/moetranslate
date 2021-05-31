@@ -168,11 +168,14 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 int
 main(int argc, char *argv[])
 {
-	if (argc < 4) {
-		fprintf(stderr, "%s SOURCE TARGET [-b] TEXT\n"
+	const char help[] = "%s SOURCE TARGET [-b] TEXT\n"
 				"Example:\n"
-				"\t%s en id -b \"hello\"\n",
-				argv[0], argv[0]);
+				"\t[BRIEF MODE]\n"
+				"\t%s en id -b \"hello\"\n"
+				"\t[FULL MODE]\n"
+				"\t%s en id \"hello\"\n";
+	if (argc < 4) {
+		fprintf(stderr, help, argv[0], argv[0], argv[0]);
 		return 1;
 	}
 
@@ -180,6 +183,10 @@ main(int argc, char *argv[])
 	lang.dest = argv[2];
 
 	if (strcmp(argv[3], "-b") == 0) {
+		if (argv[4] == NULL) {
+			fprintf(stderr, help, argv[0], argv[0], argv[0]);
+			return 1;
+		}
 		lang.text = argv[4];
 		brief_mode();
 	} else {
