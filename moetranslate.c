@@ -57,22 +57,32 @@ brief_mode(void)
 
 	/* init curl session */
 	curl = curl_easy_init();
+	if (!curl) {
+		goto cleanup;
+	}
 	dest = request_handler(curl, url);
+	if (!dest) {
+		goto cleanup;
+	}
 
 	jsmn_init(&parser);
 	r = jsmn_parse(&parser, dest, strlen(dest), tok,
 			sizeof(tok) / sizeof(tok[0]));
-	if (r < 0)
-		return;
-
+	if (r < 0) {
+		fprintf(stderr, "Error parsing JSON\n");
+		goto cleanup;
+	}
 
 	t = &tok[tok_pos];
 	fprintf(stdout, "%.*s\n", t->end - t->start, dest + t->start);
-	
 
-	free(dest);
-	free(url);
-	curl_easy_cleanup(curl);
+cleanup:
+	if (dest)
+		free(dest);
+	if (url)
+		free(url);
+	if (curl)
+		curl_easy_cleanup(curl);
 }
 
 static void
@@ -86,13 +96,23 @@ full_mode(void)
 
 	/* init curl session */
 	curl = curl_easy_init();
+	if (!curl) {
+		goto cleanup;
+	}
 	dest = request_handler(curl, url);
+	if (!dest) {
+		goto cleanup;
+	}
 	/* TODO */
 
-	puts(dest);
-	free(dest);
-	free(url);
-	curl_easy_cleanup(curl);
+	fprintf(stdout, dest);
+cleanup:
+	if (dest)
+		free(dest);
+	if (url)
+		free(url);
+	if (curl)
+		curl_easy_cleanup(curl);
 }
 
 static char *
@@ -105,8 +125,18 @@ url_parser(CURL *curl, int mode)
 
 	/* create duplicate variable url_google */
 	ret = strdup(url_google);
+	if (!ret) {
+		fprintf(stderr, "Error allocating memory!");
+		return NULL;
+	}
 	/* we want appending url_google with url_params */
 	tmp = realloc(ret, strlen(ret)+strlen(url_params[mode])+1);
+	if (!tmp) {
+		fprintf(stderr, "Error reallocating memory!");
+		free(ret);
+		return NULL;
+	}
+
 	ret = tmp;
 	strcat(ret, url_params[mode]);
 
@@ -117,6 +147,12 @@ url_parser(CURL *curl, int mode)
 	tmp = realloc(ret, len_ret +
 			strlen(curl_escape) +
 			strlen(lang.src) + strlen(lang.dest)+1);
+	if (!tmp) {
+		fprintf(stderr, "Error reallocating memory!");
+		free(ret);
+		curl_free(curl_escape);
+		return NULL;
+	}
 	ret = tmp;
 	tmp = strdup(ret);
 	sprintf(ret, tmp, lang.src, lang.dest, curl_escape);
@@ -141,6 +177,12 @@ request_handler(CURL *curl, const char *url)
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
 
 	ccode = curl_easy_perform(curl);
+	if (ccode != CURLE_OK) {
+		fprintf(stderr, "curl_easy_perform(): %s\n",
+				curl_easy_strerror(ccode));
+		free(mem.memory);
+		return NULL;
+	}
 
 	return mem.memory;
 }
