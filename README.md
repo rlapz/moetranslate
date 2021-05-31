@@ -10,7 +10,7 @@ A simple language translator written in C
 cc moestranslate.c -lcurl -o moetranslate
 ```
 
-## How to use:
+## How to Use:
 
 ```
 ./moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
