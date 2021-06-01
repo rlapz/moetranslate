@@ -7,7 +7,8 @@ A simple language translator written in C
 ## How to Compile:
 
 ```
-cc moestranslate.c -lcurl -o moetranslate
+chmod +x compile.sh
+./compile.sh
 ```
 
 ## How to Use:
@@ -26,10 +27,6 @@ cc moestranslate.c -lcurl -o moetranslate
 	Will show translated WORD/SENTENCE with autocorrection (if needed) and
 	more information.
 
-
-## Third Party Libraries
-1. [curl](https://github.com/curl/curl)
-2. [jsmn](https://github.com/zserge/jsmn)
 
 ## TODO:
 1. Parse Full mode
