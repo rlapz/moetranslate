@@ -7,6 +7,9 @@
 
 
 /* macros */
+#define SUM_LEN_STRING(A, B, C, D) \
+	(strlen(A) + strlen(B) + strlen(C) + strlen(D))
+
 enum {
 	BRIEF,
 	FULL
@@ -63,15 +66,16 @@ brief_mode(void)
 	if (!dest)
 		goto cleanup;
 
-	/* EXPERIMENTAL !! */
-	/* JSON parser */
 
+	/* JSON parser */
+	/* dest[i][0][0] */
 	parser = cJSON_Parse(dest);
 	array = cJSON_GetArrayItem(parser, 0);
 
 	cJSON_ArrayForEach(iterator, array) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value))
+			/* show the result to stdout */
 			fprintf(stdout, "%s", cJSON_GetStringValue(value));
 	}
 	puts("");
@@ -126,42 +130,31 @@ url_parser(CURL *curl, int mode)
 	char *curl_escape	= NULL;
 	size_t len_ret;
 
-	/* create duplicate variable url_google */
-	ret = strndup(url_google, strlen(url_google));
-	if (!ret) {
-		fprintf(stderr, "Error allocating memory!");
-		return NULL;
-	}
-	/* we want appending url_google with url_params */
-	tmp = realloc(ret, strlen(ret)+strlen(url_params[mode])+1);
-	if (!tmp) {
-		fprintf(stderr, "Error reallocating memory!");
-		free(ret);
-		return NULL;
-	}
-	ret = tmp;
-
-	strncat(ret, url_params[mode], strlen(url_params[mode]));
-
-	/* convert TEXT to url escape */
 	curl_escape = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
+	char options[SUM_LEN_STRING(curl_escape, lang.src, lang.dest,
+			url_params[mode])+1];
 
-	len_ret = strlen(ret);
-	tmp = realloc(ret, len_ret +
-			strlen(curl_escape) +
-			strlen(lang.src) + strlen(lang.dest)+1);
+	sprintf(options, url_params[mode], lang.src, lang.dest, curl_escape);
+
+	ret = strdup(url_google);
+	if (!ret) {
+		perror("strdup");
+		return NULL;
+	}
+
+	tmp = realloc(ret, strlen(ret) + strlen(options) +1);
 	if (!tmp) {
-		fprintf(stderr, "Error reallocating memory!");
+		perror("realloc");
 		free(ret);
-		curl_free(curl_escape);
 		return NULL;
 	}
 	ret = tmp;
-	tmp = strdup(ret);
-	sprintf(ret, tmp, lang.src, lang.dest, curl_escape);
+	strcat(ret, options);
+	len_ret = strlen(ret);
+	ret[len_ret] = '\0';
 
-	free(tmp);
 	curl_free(curl_escape);
+
 	return ret;
 }
 
@@ -199,6 +192,7 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 
 	char *ptr = realloc(mem->memory, mem->size + realsize +1);
 	if (!ptr) {
+		perror("write_callback()");
 		return 1;
 	}
 
