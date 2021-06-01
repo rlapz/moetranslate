@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cc -g moetranslate.c `pkg-config --cflags json-c` `pkg-config --libs json-c`  -lcurl -o moetranslate
+cc -g moetranslate.c cJSON.c  -lcurl -o moetranslate

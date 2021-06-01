@@ -2,7 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <curl/curl.h>
-#include <json.h>
+
+#include "cJSON.h"
 
 
 /* macros */
@@ -44,10 +45,11 @@ static const char *url_params[] = {
 static void
 brief_mode(void)
 {
-	char *url;
-	char *dest;
+	char *url	= NULL;
+	char *dest	= NULL;
+	CURL *curl	= NULL;
+	cJSON *parser, *array, *iterator, *value;
 
-	CURL *curl;
 	url = url_parser(curl, BRIEF);
 
 	/* init curl session */
@@ -63,31 +65,17 @@ brief_mode(void)
 	/* EXPERIMENTAL !! */
 	/* JSON parser */
 
-	json_object *jobj = json_tokener_parse(dest);
-	json_object *jarray;
-	int arraylen;
+	parser = cJSON_Parse(dest);
+	array = cJSON_GetArrayItem(parser, 0);
 
-	arraylen = json_object_array_length(jobj);
-	jarray = json_object_array_get_idx(jobj, 0);
-
-	json_object *jvalue;
-	json_object *ja;
-	enum json_type type;
-	for (int i = 0; i < arraylen; i++) {
-		jvalue = json_object_array_get_idx(jarray, i);
-		type = json_object_get_type(jvalue);
-		if (type != json_type_object && type == json_type_array) {
-			ja = json_object_array_get_idx(jvalue, 0);
-			fprintf(stdout, "%s", json_object_get_string(ja));
-		} else {
-			puts("");
-			break;
-		}
+	cJSON_ArrayForEach(iterator, array) {
+		value = cJSON_GetArrayItem(iterator, 0);
+		if (cJSON_IsString(value))
+			fprintf(stdout, "%s", cJSON_GetStringValue(value));
 	}
+	puts("");
 
-	while (json_object_put(jobj) != 1) {
-		free(jobj);
-	}
+	cJSON_Delete(parser);
 
 cleanup:
 	if (dest)
@@ -101,10 +89,10 @@ cleanup:
 static void
 full_mode(void)
 {
-	char *url;
-	char *dest;
+	char *url	= NULL;
+	char *dest	= NULL;
+	CURL *curl	= NULL;
 
-	CURL *curl;
 	url = url_parser(curl, FULL);
 
 	/* init curl session */
@@ -117,7 +105,7 @@ full_mode(void)
 		goto cleanup;
 	}
 	/* TODO */
-	fprintf(stdout, dest);
+	fprintf(stdout, "%s", dest);
 cleanup:
 	if (dest)
 		free(dest);
@@ -130,9 +118,9 @@ cleanup:
 static char *
 url_parser(CURL *curl, int mode)
 {
-	char *ret;
-	char *tmp;
-	char *curl_escape;
+	char *ret		= NULL;
+	char *tmp		= NULL;
+	char *curl_escape	= NULL;
 	size_t len_ret;
 
 	/* create duplicate variable url_google */
@@ -153,7 +141,7 @@ url_parser(CURL *curl, int mode)
 	strncat(ret, url_params[mode], strlen(url_params[mode]));
 
 	/* convert TEXT to url escape */
-	curl_escape = curl_easy_escape(curl, lang.text, strlen(lang.text));
+	curl_escape = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
 
 	len_ret = strlen(ret);
 	tmp = realloc(ret, len_ret +
