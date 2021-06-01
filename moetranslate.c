@@ -29,12 +29,13 @@ typedef struct {
 /* function declaration */
 static void brief_mode(void);
 static void full_mode(void);
-static char *url_parser(CURL *curl, int mode);
-static char *request_handler(CURL *curl, const char *url);
+static char *url_parser(CURL *curl);
+static char *request_handler(void);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
 static Lang lang;
+static int mode;
 static const char url_google[] = "https://translate.google.com/translate_a/single?";
 
 static const char *url_params[] = {
@@ -48,18 +49,13 @@ static const char *url_params[] = {
 static void
 brief_mode(void)
 {
-	char *url	= NULL;
-	char *dest	= NULL;
-	CURL *curl	= NULL;
+	char *dest = NULL;
 	cJSON *parser, *array, *iterator, *value;
 
-	/* init curl session */
-	if (!(curl = curl_easy_init()))
-		goto cleanup;
-	if (!(url = url_parser(curl, FULL)))
-		goto cleanup;
-	if (!(dest = request_handler(curl, url)))
-		goto cleanup;
+	/* set mode */
+	mode = BRIEF;
+	if (!(dest = request_handler()))
+		return;
 
 	/* JSON parser */
 	/* dest[i][0][0] */
@@ -76,46 +72,30 @@ brief_mode(void)
 
 	cJSON_Delete(parser);
 
-cleanup:
-	if (dest)
-		free(dest);
-	if (url)
-		free(url);
-	if (curl)
-		curl_easy_cleanup(curl);
+	free(dest);
 }
 
 static void
 full_mode(void)
 {
-	char *url	= NULL;
-	char *dest	= NULL;
-	CURL *curl	= NULL;
+	char *dest = NULL;
 
+	/* set mode */
+	mode = FULL;
 	/* init curl session */
-	if (!(curl = curl_easy_init()))
-		goto cleanup;
-	if (!(url = url_parser(curl, FULL)))
-		goto cleanup;
-	if (!(dest = request_handler(curl, url)))
-		goto cleanup;
+	if (!(dest = request_handler()))
+		return;
 	
 	/* TODO 
 	 * full mode json parser
 	 */
 	fprintf(stdout, "%s", dest);
 
-cleanup:
-	if (dest)
-		free(dest);
-	if (url)
-		free(url);
-	if (curl)
-		curl_easy_cleanup(curl);
+	free(dest);
 }
 
 static char *
-url_parser(CURL *curl, int mode)
+url_parser(CURL *curl)
 {
 	char *ret		= NULL;
 	char *tmp		= NULL;
@@ -159,12 +139,25 @@ url_parser(CURL *curl, int mode)
 }
 
 static char *
-request_handler(CURL *curl, const char *url)
+request_handler(void)
 {
+	char *url	= NULL;
+	CURL *curl	= NULL;
 	Memory mem;
 	CURLcode ccode;
 
-	mem.memory = malloc(1);
+	if (!(curl = curl_easy_init())) {
+		perror("request_handler(): curl_easy_init()");
+		return NULL;
+	}
+	if (!(url = url_parser(curl))) {
+		perror("request_handler(): url_parser()");
+		goto cleanup;
+	}
+	if (!(mem.memory = malloc(1))) {
+		perror("request_handler(): malloc()");
+		goto cleanup;
+	}
 	mem.size = 0;
 
 	/* set url */
@@ -187,7 +180,14 @@ request_handler(CURL *curl, const char *url)
 		return NULL;
 	}
 
-	return mem.memory;
+cleanup:
+	curl_easy_cleanup(curl);
+	if (url)
+		free(url);
+	if (mem.memory)
+		return mem.memory;
+	return NULL;
+
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
