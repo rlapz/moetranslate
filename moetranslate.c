@@ -11,14 +11,14 @@
 	(strlen(A) + strlen(B) + strlen(C) + strlen(D))
 
 enum {
-	BRIEF,
-	FULL
+	BRIEF,	/* brief mode */
+	FULL	/* full mode */
 };
 
 typedef struct {
-	char *src;
-	char *dest;
-	char *text;
+	char *src;	/* source language */
+	char *dest;	/* target language */
+	char *text;	/* text/words */
 } Lang;
 
 typedef struct {
@@ -33,7 +33,7 @@ static char *url_parser(CURL *curl, int mode);
 static char *request_handler(CURL *curl, const char *url);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
-/* variables */
+/* global variables */
 static Lang lang;
 static const char url_google[] = "https://translate.google.com/translate_a/single?";
 
@@ -111,8 +111,11 @@ full_mode(void)
 	if (!dest)
 		goto cleanup;
 	
-	/* TODO */
+	/* TODO 
+	 * full mode json parser
+	 */
 	fprintf(stdout, "%s", dest);
+
 cleanup:
 	if (dest)
 		free(dest);
@@ -130,21 +133,23 @@ url_parser(CURL *curl, int mode)
 	char *curl_escape	= NULL;
 	size_t len_ret;
 
+	/* url encoding */
 	curl_escape = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
 	char options[SUM_LEN_STRING(curl_escape, lang.src, lang.dest,
 			url_params[mode])+1];
 
+	/* formatting string */
 	sprintf(options, url_params[mode], lang.src, lang.dest, curl_escape);
 
 	ret = strdup(url_google);
 	if (!ret) {
-		perror("strdup");
+		perror("url_parser(): strdup");
 		return NULL;
 	}
 
 	tmp = realloc(ret, strlen(ret) + strlen(options) +1);
 	if (!tmp) {
-		perror("realloc");
+		perror("url_parser(): realloc");
 		free(ret);
 		return NULL;
 	}
@@ -167,15 +172,21 @@ request_handler(CURL *curl, const char *url)
 	mem.memory = malloc(1);
 	mem.size = 0;
 
+	/* set url */
 	curl_easy_setopt(curl, CURLOPT_URL, url);
+	/* set write function helper */
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+	/* write data to memory */
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&mem);
+	/* set user-agent */
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+	/* set timeout */
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L); /* timeout 10s */
 
+	/* sending request */
 	ccode = curl_easy_perform(curl);
 	if (ccode != CURLE_OK) {
-		fprintf(stderr, "curl_easy_perform(): %s\n",
+		fprintf(stderr, "request_handler(): curl_easy_perform(): %s\n",
 				curl_easy_strerror(ccode));
 		free(mem.memory);
 		return NULL;
@@ -184,13 +195,15 @@ request_handler(CURL *curl, const char *url)
 	return mem.memory;
 }
 
+/* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
 static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
+	char *ptr	= NULL;
+	Memory *mem	= (Memory*)data;
 	size_t realsize = size * nmemb;
-	Memory *mem = (Memory*)data;
-
-	char *ptr = realloc(mem->memory, mem->size + realsize +1);
+	
+	ptr = realloc(mem->memory, mem->size + realsize +1);
 	if (!ptr) {
 		perror("write_callback()");
 		return 1;
@@ -208,6 +221,9 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 int
 main(int argc, char *argv[])
 {
+	/* TODO
+	 * using "argparse"
+	 */
 	const char help[] = "%s SOURCE TARGET [-b] TEXT\n"
 				"Example:\n"
 				"\t[BRIEF MODE]\n"
