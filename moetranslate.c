@@ -131,32 +131,38 @@ url_parser(CURL *curl, int mode)
 	char *ret		= NULL;
 	char *tmp		= NULL;
 	char *curl_escape	= NULL;
-	size_t len_ret;
+	size_t length;
 
 	/* url encoding */
 	curl_escape = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
-	char options[SUM_LEN_STRING(curl_escape, lang.src, lang.dest,
-			url_params[mode])+1];
+
+	length = SUM_LEN_STRING(curl_escape, lang.src, lang.dest,
+			url_params[mode]) -5; /* (6 = %s%s%s)-1 */
+
+	char options[length];
+
+	memset(options, '\0', sizeof(options));
 
 	/* formatting string */
-	sprintf(options, url_params[mode], lang.src, lang.dest, curl_escape);
+	snprintf(options, length,
+			url_params[mode], lang.src, lang.dest, curl_escape);
 
-	ret = strdup(url_google);
+	length = strlen(options);
+	ret = strndup(url_google, strlen(url_google));
 	if (!ret) {
 		perror("url_parser(): strdup");
 		return NULL;
 	}
 
-	tmp = realloc(ret, strlen(ret) + strlen(options) +1);
+	tmp = realloc(ret, strlen(ret) + length +1);
 	if (!tmp) {
 		perror("url_parser(): realloc");
 		free(ret);
 		return NULL;
 	}
 	ret = tmp;
-	strcat(ret, options);
-	len_ret = strlen(ret);
-	ret[len_ret] = '\0';
+	strncat(ret, options, length);
+	ret[strlen(ret)] = '\0';
 
 	curl_free(curl_escape);
 
