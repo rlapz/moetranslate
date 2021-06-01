@@ -2,8 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <curl/curl.h>
+#include <json.h>
 
-#include "jsmn.h"
+//#include "jsmn.h"
 
 /* macros */
 
@@ -47,10 +48,6 @@ brief_mode(void)
 {
 	char *url;
 	char *dest;
-	jsmn_parser parser;
-	jsmntok_t tok[128];
-	jsmntok_t *t;
-	int r, tok_pos = 3;
 
 	CURL *curl;
 	url = url_parser(curl, BRIEF);
@@ -65,16 +62,36 @@ brief_mode(void)
 		goto cleanup;
 	}
 
-	jsmn_init(&parser);
-	r = jsmn_parse(&parser, dest, strlen(dest), tok,
-			sizeof(tok) / sizeof(tok[0]));
-	if (r < 0) {
-		fprintf(stderr, "Error parsing JSON\n");
-		goto cleanup;
+	/* EXPERIMENTAL !! */
+	/* JSON parser */
+
+	json_object *jobj = json_tokener_parse(dest);
+	json_object *jarray;
+	int arraylen;
+
+	arraylen = json_object_array_length(jobj);
+	jarray = json_object_array_get_idx(jobj, 0);
+
+	json_object *jvalue;
+	json_object *ja;
+	enum json_type type;
+	for (int i = 0; i < arraylen; i++) {
+		jvalue = json_object_array_get_idx(jarray, i);
+		type = json_object_get_type(jvalue);
+		if (type != json_type_object) {
+			if (type == json_type_array) {
+				ja = json_object_array_get_idx(jvalue, 0);
+				fprintf(stdout, "%s", json_object_get_string(ja));
+			} else {
+				puts("");
+				break;
+			}
+		}
 	}
 
-	t = &tok[tok_pos];
-	fprintf(stdout, "%.*s\n", t->end - t->start, dest + t->start);
+	while (json_object_put(jobj) != 1) {
+		free(jobj);
+	}
 
 cleanup:
 	if (dest)
@@ -104,8 +121,8 @@ full_mode(void)
 		goto cleanup;
 	}
 	/* TODO */
-
-	fprintf(stdout, dest);
+	puts("");
+	//fprintf(stdout, dest);
 cleanup:
 	if (dest)
 		free(dest);
