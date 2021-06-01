@@ -1,5 +1,5 @@
 # moetranslate
-A simple language translator written in C
+Simple language translator written in C
 
 ## Currently Support:
 1. Google Translate API
