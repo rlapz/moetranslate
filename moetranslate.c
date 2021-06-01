@@ -51,16 +51,17 @@ brief_mode(void)
 	cJSON *parser, *array, *iterator, *value;
 
 	url = url_parser(curl, BRIEF);
-
+	if (!url)
+		return;
+	
 	/* init curl session */
 	curl = curl_easy_init();
-	if (!curl) {
+	if (!curl)
 		goto cleanup;
-	}
+	
 	dest = request_handler(curl, url);
-	if (!dest) {
+	if (!dest)
 		goto cleanup;
-	}
 
 	/* EXPERIMENTAL !! */
 	/* JSON parser */
@@ -94,16 +95,18 @@ full_mode(void)
 	CURL *curl	= NULL;
 
 	url = url_parser(curl, FULL);
+	if (!url)
+		return;
 
 	/* init curl session */
 	curl = curl_easy_init();
-	if (!curl) {
+	if (!curl)
 		goto cleanup;
-	}
+	
 	dest = request_handler(curl, url);
-	if (!dest) {
+	if (!dest)
 		goto cleanup;
-	}
+	
 	/* TODO */
 	fprintf(stdout, "%s", dest);
 cleanup:
