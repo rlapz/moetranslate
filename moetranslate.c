@@ -76,14 +76,12 @@ brief_mode(void)
 	for (int i = 0; i < arraylen; i++) {
 		jvalue = json_object_array_get_idx(jarray, i);
 		type = json_object_get_type(jvalue);
-		if (type != json_type_object) {
-			if (type == json_type_array) {
-				ja = json_object_array_get_idx(jvalue, 0);
-				fprintf(stdout, "%s", json_object_get_string(ja));
-			} else {
-				puts("");
-				break;
-			}
+		if (type != json_type_object && type == json_type_array) {
+			ja = json_object_array_get_idx(jvalue, 0);
+			fprintf(stdout, "%s", json_object_get_string(ja));
+		} else {
+			puts("");
+			break;
 		}
 	}
 
@@ -138,7 +136,7 @@ url_parser(CURL *curl, int mode)
 	size_t len_ret;
 
 	/* create duplicate variable url_google */
-	ret = strdup(url_google);
+	ret = strndup(url_google, strlen(url_google));
 	if (!ret) {
 		fprintf(stderr, "Error allocating memory!");
 		return NULL;
@@ -150,9 +148,9 @@ url_parser(CURL *curl, int mode)
 		free(ret);
 		return NULL;
 	}
-
 	ret = tmp;
-	strcat(ret, url_params[mode]);
+
+	strncat(ret, url_params[mode], strlen(url_params[mode]));
 
 	/* convert TEXT to url escape */
 	curl_escape = curl_easy_escape(curl, lang.text, strlen(lang.text));
@@ -189,6 +187,7 @@ request_handler(CURL *curl, const char *url)
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&mem);
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L); /* timeout 10s */
 
 	ccode = curl_easy_perform(curl);
 	if (ccode != CURLE_OK) {
@@ -239,7 +238,7 @@ main(int argc, char *argv[])
 	lang.dest = argv[2];
 
 	if (strcmp(argv[3], "-b") == 0) {
-		if (argv[4] == NULL) {
+		if (argv[4] == NULL || strlen(argv[4]) == 0) {
 			fprintf(stderr, help, argv[0], argv[0], argv[0]);
 			return 1;
 		}
