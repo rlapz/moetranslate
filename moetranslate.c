@@ -4,10 +4,8 @@
 #include <curl/curl.h>
 #include <json.h>
 
-//#include "jsmn.h"
 
 /* macros */
-
 enum {
 	BRIEF,
 	FULL
@@ -121,8 +119,7 @@ full_mode(void)
 		goto cleanup;
 	}
 	/* TODO */
-	puts("");
-	//fprintf(stdout, dest);
+	fprintf(stdout, dest);
 cleanup:
 	if (dest)
 		free(dest);
