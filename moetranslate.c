@@ -53,19 +53,13 @@ brief_mode(void)
 	CURL *curl	= NULL;
 	cJSON *parser, *array, *iterator, *value;
 
-	url = url_parser(curl, BRIEF);
-	if (!url)
-		return;
-	
 	/* init curl session */
-	curl = curl_easy_init();
-	if (!curl)
+	if (!(curl = curl_easy_init()))
 		goto cleanup;
-	
-	dest = request_handler(curl, url);
-	if (!dest)
+	if (!(url = url_parser(curl, FULL)))
 		goto cleanup;
-
+	if (!(dest = request_handler(curl, url)))
+		goto cleanup;
 
 	/* JSON parser */
 	/* dest[i][0][0] */
@@ -98,17 +92,12 @@ full_mode(void)
 	char *dest	= NULL;
 	CURL *curl	= NULL;
 
-	url = url_parser(curl, FULL);
-	if (!url)
-		return;
-
 	/* init curl session */
-	curl = curl_easy_init();
-	if (!curl)
+	if (!(curl = curl_easy_init()))
 		goto cleanup;
-	
-	dest = request_handler(curl, url);
-	if (!dest)
+	if (!(url = url_parser(curl, FULL)))
+		goto cleanup;
+	if (!(dest = request_handler(curl, url)))
 		goto cleanup;
 	
 	/* TODO 
