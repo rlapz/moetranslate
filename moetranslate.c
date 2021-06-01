@@ -155,7 +155,7 @@ request_handler(void)
 		goto cleanup;
 	}
 	if (!(mem.memory = malloc(1))) {
-		perror("request_handler(): malloc()");
+		perror("request_handler(): malloc()=>Memory.memory");
 		goto cleanup;
 	}
 	mem.size = 0;
@@ -184,10 +184,7 @@ cleanup:
 	curl_easy_cleanup(curl);
 	if (url)
 		free(url);
-	if (mem.memory)
-		return mem.memory;
-	return NULL;
-
+	return mem.memory;
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
