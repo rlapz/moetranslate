@@ -36,9 +36,9 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 /* global variables */
 static Lang lang;
 static int mode;
-static const char url_google[] = "https://translate.google.com/translate_a/single?";
-
-static const char *url_params[] = {
+static long timeout		= 10L; /* set timeout request */
+static const char url_google[]	= "https://translate.google.com/translate_a/single?";
+static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&sl=%s&tl=%s&dt=t&q=%s",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
@@ -59,8 +59,10 @@ brief_mode(void)
 
 	/* JSON parser */
 	/* dest[i][0][0] */
-	parser = cJSON_Parse(dest);
-	array = cJSON_GetArrayItem(parser, 0);
+	if (!(parser = cJSON_Parse(dest)))
+		goto cleanup;
+	if (!(array = cJSON_GetArrayItem(parser, 0)))
+		goto cleanup;
 
 	cJSON_ArrayForEach(iterator, array) {
 		value = cJSON_GetArrayItem(iterator, 0);
@@ -70,8 +72,8 @@ brief_mode(void)
 	}
 	puts("");
 
+cleanup:
 	cJSON_Delete(parser);
-
 	free(dest);
 }
 
@@ -99,43 +101,47 @@ url_parser(CURL *curl)
 {
 	char *ret		= NULL;
 	char *tmp		= NULL;
-	char *curl_escape	= NULL;
+	char *text_encoding	= NULL;
 	size_t length;
 
-	/* url encoding */
-	curl_escape = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
+	/* text encoding */
+	text_encoding = curl_easy_escape(curl, lang.text,(int)strlen(lang.text));
+	if (!text_encoding) {
+		perror("url_parser(): curl_easy_escape()");
+		return NULL;
+	}
 
-	length = SUM_LEN_STRING(curl_escape, lang.src, lang.dest,
+	length = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
 			url_params[mode]) -5; /* (6 = %s%s%s)-1 */
 
 	char options[length];
-
-	memset(options, '\0', sizeof(options));
+	options[length] = '\0';
 
 	/* formatting string */
 	snprintf(options, length,
-			url_params[mode], lang.src, lang.dest, curl_escape);
+			url_params[mode], lang.src, lang.dest, text_encoding);
 
 	length = strlen(options);
-	ret = strndup(url_google, strlen(url_google));
-	if (!ret) {
+	tmp = strndup(url_google, strlen(url_google));
+	if (!tmp) {
 		perror("url_parser(): strdup");
-		return NULL;
+		goto cleanup;
 	}
 
-	tmp = realloc(ret, strlen(ret) + length +1);
-	if (!tmp) {
+	ret = realloc(tmp, strlen(tmp) + length +1);
+	if (!ret) {
 		perror("url_parser(): realloc");
-		free(ret);
-		return NULL;
+		free(tmp);
+		goto cleanup;
 	}
-	ret = tmp;
 	strncat(ret, options, length);
 	ret[strlen(ret)] = '\0';
 
-	curl_free(curl_escape);
-
-	return ret;
+cleanup:
+	curl_free(text_encoding);
+	if (ret)
+		return ret;
+	return NULL;
 }
 
 static char *
@@ -169,7 +175,7 @@ request_handler(void)
 	/* set user-agent */
 	curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
 	/* set timeout */
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L); /* timeout 10s */
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 
 	/* sending request */
 	ccode = curl_easy_perform(curl);
@@ -177,14 +183,17 @@ request_handler(void)
 		fprintf(stderr, "request_handler(): curl_easy_perform(): %s\n",
 				curl_easy_strerror(ccode));
 		free(mem.memory);
-		return NULL;
+		mem.memory = NULL;
+		goto cleanup;
 	}
 
 cleanup:
 	curl_easy_cleanup(curl);
 	if (url)
 		free(url);
-	return mem.memory;
+	if (mem.memory)
+		return mem.memory;
+	return NULL;
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
@@ -233,7 +242,7 @@ main(int argc, char *argv[])
 	if (strcmp(argv[3], "-b") == 0) {
 		if (argv[4] == NULL || strlen(argv[4]) == 0) {
 			fprintf(stderr, help, argv[0], argv[0], argv[0]);
-			return 1;
+			return EXIT_FAILURE;
 		}
 		lang.text = argv[4];
 		brief_mode();
@@ -242,5 +251,5 @@ main(int argc, char *argv[])
 		full_mode();
 	}
 
-	return 0;
+	return EXIT_SUCCESS;
 }
