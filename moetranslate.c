@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <curl/curl.h>
 
 #include "cJSON.h"
@@ -10,15 +11,14 @@
 #define SUM_LEN_STRING(A, B, C, D) \
 	((strlen(A)) + (strlen(B)) + (strlen(C)) + (strlen(D)))
 
-enum {
-	BRIEF,	/* brief mode */
-	FULL	/* full mode */
-};
+#define BRIEF	0	/* brief mode */
+#define FULL	1	/* full mode */
 
-typedef struct {
+typedef struct __attribute__((__packed__)) {
 	char *src;	/* source language */
 	char *dest;	/* target language */
 	char *text;	/* text/words */
+	int32_t mode;	/* mode translation */
 } Lang;
 
 typedef struct {
@@ -35,7 +35,6 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
 static Lang lang;
-static int mode;
 static long timeout		= 10L; /* set timeout request (10s) */
 static const char url_google[]	= "https://translate.google.com/translate_a/single?";
 static const char *url_params[]	= {
@@ -112,13 +111,13 @@ url_parser(CURL *curl)
 	}
 
 	length_opt = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
-			url_params[mode]) -5; /* sum(%s%s%s) == 6 chars */
+			url_params[lang.mode]) -5; /* sum(%s%s%s) == 6 chars */
 
 	char options[length_opt];
 
 	/* formatting string */
 	snprintf(options, length_opt,
-			url_params[mode], lang.src, lang.dest, text_encoding);
+			url_params[lang.mode], lang.src, lang.dest, text_encoding);
 
 	options[length_opt] = '\0';
 
@@ -243,13 +242,11 @@ main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		lang.text = argv[4];
-
-		mode = BRIEF;
+		lang.mode = BRIEF;
 		brief_mode();
 	} else {
 		lang.text = argv[3];
-
-		mode = FULL;
+		lang.mode = FULL;
 		full_mode();
 	}
 
