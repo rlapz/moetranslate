@@ -21,11 +21,20 @@ chmod +x compile.sh
 
 
 1. Brief mode:
-	`./moetranslate en id -b "Hello world\!"`
+	`./moetranslate auto id -b "Hello world\!"`
+
+	`auto`	-> automatic detection
+	`id`	-> Indonsian language code
 2. Full mode:
 	`./moetranslate en id "Hello wrld\!"`
+
+	`en`	-> English US language code
+
 	Will show translated WORD/SENTENCE with autocorrection (if needed) and
 	more information.
+
+## Language Code:
+https://cloud.google.com/translate/docs/languages
 
 
 ## TODO:
