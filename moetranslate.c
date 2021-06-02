@@ -8,7 +8,7 @@
 
 /* macros */
 #define SUM_LEN_STRING(A, B, C, D) \
-	(strlen(A) + strlen(B) + strlen(C) + strlen(D))
+	((strlen(A)) + (strlen(B)) + (strlen(C)) + (strlen(D)))
 
 enum {
 	BRIEF,	/* brief mode */
