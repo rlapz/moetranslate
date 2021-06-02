@@ -36,10 +36,10 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 /* global variables */
 static Lang lang;
 static int mode;
-static long timeout		= 10L; /* set timeout request */
+static long timeout		= 10L; /* set timeout request (10s) */
 static const char url_google[]	= "https://translate.google.com/translate_a/single?";
 static const char *url_params[]	= {
-	[BRIEF]	= "client=gtx&sl=%s&tl=%s&dt=t&q=%s",
+	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
 };
@@ -102,40 +102,41 @@ url_parser(CURL *curl)
 	char *ret		= NULL;
 	char *tmp		= NULL;
 	char *text_encoding	= NULL;
-	size_t length;
+	size_t length_opt;
 
 	/* text encoding */
-	text_encoding = curl_easy_escape(curl, lang.text,(int)strlen(lang.text));
+	text_encoding = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
 	if (!text_encoding) {
 		perror("url_parser(): curl_easy_escape()");
 		return NULL;
 	}
 
-	length = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
-			url_params[mode]) -5; /* (6 = %s%s%s)-1 */
+	length_opt = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
+			url_params[mode]) -5; /* sum(%s%s%s) == 6 chars */
 
-	char options[length];
-	options[length] = '\0';
+	char options[length_opt];
 
 	/* formatting string */
-	snprintf(options, length,
+	snprintf(options, length_opt,
 			url_params[mode], lang.src, lang.dest, text_encoding);
 
-	length = strlen(options);
+	options[length_opt] = '\0';
+
 	tmp = strndup(url_google, strlen(url_google));
 	if (!tmp) {
 		perror("url_parser(): strdup");
 		goto cleanup;
 	}
 
-	ret = realloc(tmp, strlen(tmp) + length +1);
+	ret = realloc(tmp, strlen(tmp) + length_opt +1);
 	if (!ret) {
 		perror("url_parser(): realloc");
 		free(tmp);
 		goto cleanup;
 	}
-	strncat(ret, options, length);
-	ret[strlen(ret)] = '\0';
+
+	/* concat between url_google and options */
+	strncat(ret, options, length_opt);
 
 cleanup:
 	curl_free(text_encoding);
