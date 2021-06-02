@@ -59,11 +59,11 @@ brief_mode(void)
 	/* dest[i][0][0] */
 	if (!(parser = cJSON_Parse(dest))) {
 		perror("brief_mode(): cJSON_Parse()");
-		goto error;
+		goto cleanup;
 	}
 	if (!(array = cJSON_GetArrayItem(parser, 0))) {
 		perror("brief_mode(): cJSON_GetArrayItem()");
-		goto error;
+		goto cleanup;
 	}
 
 	cJSON_ArrayForEach(iterator, array) {
@@ -74,7 +74,7 @@ brief_mode(void)
 	}
 	puts("");
 
-error:
+cleanup:
 	cJSON_Delete(parser);
 	free(dest);
 }
@@ -123,7 +123,7 @@ url_parser(CURL *curl)
 	options[length_opt] = '\0';
 
 	if (!(tmp = strndup(url_google, strlen(url_google)))) {
-		perror("url_parser(): strdup");
+		perror("url_parser(): strndup");
 		goto cleanup;
 	}
 
