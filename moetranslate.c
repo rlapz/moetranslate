@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <curl/curl.h>
 
 #include "cJSON.h"
@@ -14,17 +13,17 @@
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
-typedef struct __attribute__((__packed__)) {
-	char *src;	/* source language */
-	char *dest;	/* target language */
-	char *text;	/* text/words */
-	int32_t mode;	/* mode translation */
-} Lang;
+struct Lang {
+	char	*src;	/* source language */
+	char	*dest;	/* target language */
+	char	*text;	/* text/words */
+	int	mode;	/* mode translation */
+} __attribute__((__packed__));
 
-typedef struct {
-	char *memory;
-	size_t size;
-} Memory;
+struct Memory{
+	char	*memory;
+	size_t	size;
+};
 
 /* function declaration */
 static void brief_mode(void);
@@ -34,7 +33,7 @@ static char *request_handler(void);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
-static Lang lang;
+static struct Lang lang;
 static long timeout		= 10L; /* set timeout request (10s) */
 static const char url_google[]	= "https://translate.google.com/translate_a/single?";
 static const char *url_params[]	= {
@@ -42,7 +41,6 @@ static const char *url_params[]	= {
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
 };
-
 
 /* function implementations */
 static void
@@ -145,9 +143,9 @@ cleanup:
 static char *
 request_handler(void)
 {
-	char *url	= NULL;
-	CURL *curl	= NULL;
-	Memory mem	= {NULL, 0};
+	char *url		= NULL;
+	CURL *curl		= NULL;
+	struct Memory mem	= {NULL, 0};
 	CURLcode ccode;
 
 	/* curl init */
@@ -198,9 +196,9 @@ cleanup:
 static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
-	char *ptr	= NULL;
-	Memory *mem	= (Memory*)data;
-	size_t realsize = size * nmemb;
+	char *ptr		= NULL;
+	struct Memory *mem	= (struct Memory*)data;
+	size_t realsize		= (size * nmemb);
 	
 	if (!(ptr = realloc(mem->memory, mem->size + realsize +1))) {
 		perror("write_callback()");
