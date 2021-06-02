@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cc -Wall -Wextra moetranslate.c cJSON.c  -lcurl -o moetranslate -O3
+cc -Wall -Wextra moetranslate.c cJSON.c  -lcurl -o moetranslate -Ofast
