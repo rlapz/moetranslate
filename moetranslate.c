@@ -8,7 +8,7 @@
 
 /* macros */
 #define SUM_LEN_STRING(A, B, C, D) \
-	(strlen(A) + strlen(B) + strlen(C) + strlen(D))
+	((strlen(A)) + (strlen(B)) + (strlen(C)) + (strlen(D)))
 
 enum {
 	BRIEF,	/* brief mode */
@@ -36,10 +36,10 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 /* global variables */
 static Lang lang;
 static int mode;
-static long timeout		= 10L; /* set timeout request */
+static long timeout		= 10L; /* set timeout request (10s) */
 static const char url_google[]	= "https://translate.google.com/translate_a/single?";
 static const char *url_params[]	= {
-	[BRIEF]	= "client=gtx&sl=%s&tl=%s&dt=t&q=%s",
+	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
 };
@@ -52,17 +52,19 @@ brief_mode(void)
 	char *dest = NULL;
 	cJSON *parser, *array, *iterator, *value;
 
-	/* set mode */
-	mode = BRIEF;
 	if (!(dest = request_handler()))
-		return;
+		exit(1);
 
 	/* JSON parser */
 	/* dest[i][0][0] */
-	if (!(parser = cJSON_Parse(dest)))
-		goto cleanup;
-	if (!(array = cJSON_GetArrayItem(parser, 0)))
-		goto cleanup;
+	if (!(parser = cJSON_Parse(dest))) {
+		perror("brief_mode(): cJSON_Parse()");
+		goto error;
+	}
+	if (!(array = cJSON_GetArrayItem(parser, 0))) {
+		perror("brief_mode(): cJSON_GetArrayItem()");
+		goto error;
+	}
 
 	cJSON_ArrayForEach(iterator, array) {
 		value = cJSON_GetArrayItem(iterator, 0);
@@ -72,7 +74,7 @@ brief_mode(void)
 	}
 	puts("");
 
-cleanup:
+error:
 	cJSON_Delete(parser);
 	free(dest);
 }
@@ -82,11 +84,9 @@ full_mode(void)
 {
 	char *dest = NULL;
 
-	/* set mode */
-	mode = FULL;
 	/* init curl session */
 	if (!(dest = request_handler()))
-		return;
+		exit(1);
 	
 	/* TODO 
 	 * full mode json parser
@@ -102,40 +102,39 @@ url_parser(CURL *curl)
 	char *ret		= NULL;
 	char *tmp		= NULL;
 	char *text_encoding	= NULL;
-	size_t length;
+	size_t length_opt;
 
 	/* text encoding */
-	text_encoding = curl_easy_escape(curl, lang.text,(int)strlen(lang.text));
+	text_encoding = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
 	if (!text_encoding) {
 		perror("url_parser(): curl_easy_escape()");
 		return NULL;
 	}
 
-	length = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
-			url_params[mode]) -5; /* (6 = %s%s%s)-1 */
+	length_opt = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
+			url_params[mode]) -5; /* sum(%s%s%s) == 6 chars */
 
-	char options[length];
-	options[length] = '\0';
+	char options[length_opt];
 
 	/* formatting string */
-	snprintf(options, length,
+	snprintf(options, length_opt,
 			url_params[mode], lang.src, lang.dest, text_encoding);
 
-	length = strlen(options);
-	tmp = strndup(url_google, strlen(url_google));
-	if (!tmp) {
+	options[length_opt] = '\0';
+
+	if (!(tmp = strndup(url_google, strlen(url_google)))) {
 		perror("url_parser(): strdup");
 		goto cleanup;
 	}
 
-	ret = realloc(tmp, strlen(tmp) + length +1);
-	if (!ret) {
+	if (!(ret = realloc(tmp, strlen(tmp) + length_opt +1))) {
 		perror("url_parser(): realloc");
 		free(tmp);
 		goto cleanup;
 	}
-	strncat(ret, options, length);
-	ret[strlen(ret)] = '\0';
+
+	/* concat between url_google and options */
+	strncat(ret, options, length_opt);
 
 cleanup:
 	curl_free(text_encoding);
@@ -149,13 +148,15 @@ request_handler(void)
 {
 	char *url	= NULL;
 	CURL *curl	= NULL;
-	Memory mem;
+	Memory mem	= {NULL, 0};
 	CURLcode ccode;
 
+	/* curl init */
 	if (!(curl = curl_easy_init())) {
 		perror("request_handler(): curl_easy_init()");
 		return NULL;
 	}
+	/* url parser */
 	if (!(url = url_parser(curl))) {
 		perror("request_handler(): url_parser()");
 		goto cleanup;
@@ -164,7 +165,6 @@ request_handler(void)
 		perror("request_handler(): malloc()=>Memory.memory");
 		goto cleanup;
 	}
-	mem.size = 0;
 
 	/* set url */
 	curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -178,8 +178,7 @@ request_handler(void)
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 
 	/* sending request */
-	ccode = curl_easy_perform(curl);
-	if (ccode != CURLE_OK) {
+	if ((ccode = curl_easy_perform(curl)) != CURLE_OK) {
 		fprintf(stderr, "request_handler(): curl_easy_perform(): %s\n",
 				curl_easy_strerror(ccode));
 		free(mem.memory);
@@ -204,8 +203,7 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 	Memory *mem	= (Memory*)data;
 	size_t realsize = size * nmemb;
 	
-	ptr = realloc(mem->memory, mem->size + realsize +1);
-	if (!ptr) {
+	if (!(ptr = realloc(mem->memory, mem->size + realsize +1))) {
 		perror("write_callback()");
 		return 1;
 	}
@@ -245,9 +243,13 @@ main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		lang.text = argv[4];
+
+		mode = BRIEF;
 		brief_mode();
 	} else {
 		lang.text = argv[3];
+
+		mode = FULL;
 		full_mode();
 	}
 
