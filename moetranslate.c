@@ -59,6 +59,9 @@ replace_to(char *str, char i, char c)
 }
 */
 
+/* TODO
+ * add function append_string with string formatting
+ */
 static char *
 string_append(char **dest, const char *str)
 {
@@ -122,14 +125,15 @@ full_mode(void)
 		perror("full_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
-	/* TODO
-	 * add function append_string with string formatting
-	 */
 
 	/* get translation */
 	cJSON *tr = cJSON_GetArrayItem(parser, 0);
 	int count = 0;
 	//const char *format = "> %s\n -> %s\n\n";
+	
+	string_append(&string, "\"");
+	string_append(&string, lang.text);
+	string_append(&string, "\"\n\n");
 	cJSON_ArrayForEach(iterator, tr) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value)) {
@@ -138,21 +142,31 @@ full_mode(void)
 		count++;
 	}
 
-	/* get pronounce */
-	cJSON *pr = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
-	cJSON *tmp_pr = cJSON_GetArrayItem(pr, 3);
-	if (!cJSON_IsNull(tmp_pr)) {
-		string_append(&string, "\n\n[Pronounce]: ");
-		string_append(&string, tmp_pr->valuestring);
+	/* get spelling */
+	cJSON *spelling = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
+	cJSON *tmp_spl;
+	if (cJSON_GetArraySize(spelling) < 6) {
+		string_append(&string, "\n\n[Spelling]: ");
+		//string_append(&string, "\n\n");
+		cJSON_ArrayForEach(tmp_spl, spelling) {
+			if (cJSON_IsNull(tmp_spl) ||
+					cJSON_IsNumber(tmp_spl) ||
+						cJSON_IsArray(tmp_spl))
+				continue;
+			string_append(&string, "\n  ( ");
+			string_append(&string, tmp_spl->valuestring);
+			string_append(&string, " )");
+		}
 	}
 
+	/* get noun, verb, ...*/
 	cJSON *word = cJSON_GetArrayItem(parser, 1);
 	char *tmp_lbl = NULL;
 	cJSON *tmp = NULL;
-
-	/* get noun, verb, ...*/
 	cJSON_ArrayForEach(iterator, word) {
 		tmp_lbl = iterator->child->valuestring;
+		if (strlen(tmp_lbl) == 0)
+			continue;
 		tmp_lbl[0] -= 32;  /* upper case */
 		string_append(&string, "\n\n[");
 		string_append(&string, tmp_lbl);
@@ -169,8 +183,10 @@ full_mode(void)
 
 cleanup:
 	cJSON_Delete(parser);
-	free(dest);
-	free(string);
+	if (dest)
+		free(dest);
+	if (string)
+		free(string);
 }
 
 static char *
