@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <curl/curl.h>
 
-#include "cJSON.h"
+#include "lib/cJSON.h"
 
 
 /* macros */
@@ -26,6 +26,8 @@ struct Memory{
 };
 
 /* function declaration */
+static char *replace_to(char *str, char i, char c);
+static char *string_append(char *dest, const char *str);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
@@ -34,37 +36,60 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
 static struct Lang lang;
-static long timeout		= 10L; /* set timeout request (10s) */
-static const char url_google[]	= "https://translate.google.com/translate_a/single?";
+static long timeout		= 10L; /* set request timout (10s) */
+static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
-		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
+		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
 /* function implementations */
+static char *
+replace_to(char *str, char i, char c)
+{
+	char *dest = str;
+	while (*str) {
+		if (*str == i)
+			*str = c;
+		str++;
+	}
+	return dest;
+}
+
+static char *
+string_append(char *dest, const char *str)
+{
+	char *tmp;
+	size_t len = strlen(str);
+
+	if (!(tmp = realloc(dest, (strlen(dest) + len) +1))) {
+		return dest;
+	}
+	dest = tmp;
+	strncat(dest, str, len);
+
+	return dest;
+}
+
 static void
 brief_mode(void)
 {
 	char *dest = NULL;
-	cJSON *parser, *array, *iterator, *value;
+	cJSON *parser, *iterator, *value;
 
 	if (!(dest = request_handler()))
 		exit(1);
 
-	/* JSON parser */
-	/* dest[i][0][0] */
+	/* cJSON parser */
 	if (!(parser = cJSON_Parse(dest))) {
 		perror("brief_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
-	if (!(array = cJSON_GetArrayItem(parser, 0))) {
-		perror("brief_mode(): cJSON_GetArrayItem()");
-		goto cleanup;
-	}
 
-	cJSON_ArrayForEach(iterator, array) {
-		value = cJSON_GetArrayItem(iterator, 0);
+	/* dest[i][0][0] */
+	cJSON_ArrayForEach(iterator, cJSON_GetArrayItem(parser,0)) {
+		value = cJSON_GetArrayItem(iterator, 0); /* index: 0 */
 		if (cJSON_IsString(value))
 			/* show the result to stdout */
 			fprintf(stdout, "%s", cJSON_GetStringValue(value));
@@ -80,6 +105,8 @@ static void
 full_mode(void)
 {
 	char *dest = NULL;
+	char *string = calloc(sizeof(char), 1);
+	cJSON *parser, *iterator, *value;
 
 	/* init curl session */
 	if (!(dest = request_handler()))
@@ -88,9 +115,63 @@ full_mode(void)
 	/* TODO 
 	 * full mode json parser
 	 */
-	fprintf(stdout, "%s", dest);
 
+	/* test  */
+	//fprintf(stdout, "%s\n", dest);
+
+	/* cJSON parser */
+	if (!(parser = cJSON_Parse(dest))) {
+		perror("full_mode(): cJSON_Parse()");
+		goto cleanup;
+	}
+
+	/* get translation */
+	cJSON *tr = cJSON_GetArrayItem(parser, 0);
+	int count = 0;
+	//const char *format = "> %s\n -> %s\n\n";
+	cJSON_ArrayForEach(iterator, tr) {
+		value = cJSON_GetArrayItem(iterator, 0);
+		if (cJSON_IsString(value)) {
+			string = string_append(string, "> ");
+			string = string_append(string, value->next->valuestring);
+			string = string_append(string, "\n  -> ");
+			string = string_append(string, value->valuestring);
+		}
+		count++;
+	}
+
+	/* get pronounce */
+	cJSON *pr = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
+	if (cJSON_GetArraySize(pr) == 4) {
+		char *pr_val = cJSON_GetArrayItem(pr, 3)->valuestring;
+		string = string_append(string, "\n >> Pronounce: "); 
+		string = string_append(string, pr_val); 
+	}
+
+	fprintf(stdout, "%s\n", string);
+
+
+	cJSON *word = cJSON_GetArrayItem(parser, 1);
+	char *tmp_lbl = NULL;
+	cJSON *arr_tmp = NULL;
+
+	/* get noun, verb, ...*/
+	cJSON_ArrayForEach(iterator, word) {
+		tmp_lbl = iterator->child->valuestring;
+		tmp_lbl[0] -= 32;  /* upper case */
+		fprintf(stdout, "\n%s:\n", tmp_lbl);
+
+		/* list noun, verb, ... */
+		arr_tmp = iterator->child->next;
+		fprintf(stdout, "%s", replace_to(cJSON_Print(arr_tmp), '\"', ' '));
+
+	}
+	puts("");
+
+cleanup:
+	cJSON_Delete(parser);
 	free(dest);
+	free(string);
 }
 
 static char *
