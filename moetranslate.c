@@ -26,8 +26,8 @@ struct Memory{
 };
 
 /* function declaration */
-static char *replace_to(char *str, char i, char c);
-static char *string_append(char *dest, const char *str);
+/* static char *replace_to(char *str, char i, char c); */
+static char *string_append(char **dest, const char *str);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
@@ -45,6 +45,7 @@ static const char *url_params[]	= {
 };
 
 /* function implementations */
+/*
 static char *
 replace_to(char *str, char i, char c)
 {
@@ -56,20 +57,21 @@ replace_to(char *str, char i, char c)
 	}
 	return dest;
 }
+*/
 
 static char *
-string_append(char *dest, const char *str)
+string_append(char **dest, const char *str)
 {
 	char *tmp;
 	size_t len = strlen(str);
 
-	if (!(tmp = realloc(dest, (strlen(dest) + len) +1))) {
-		return dest;
+	if (!(tmp = realloc((*dest), (strlen(*dest) + len) +1))) {
+		return (*dest);
 	}
-	dest = tmp;
-	strncat(dest, str, len);
+	(*dest) = tmp;
+	strncat((*dest), str, len);
 
-	return dest;
+	return (*dest);
 }
 
 static void
@@ -112,10 +114,6 @@ full_mode(void)
 	if (!(dest = request_handler()))
 		exit(1);
 	
-	/* TODO 
-	 * full mode json parser
-	 */
-
 	/* test  */
 	//fprintf(stdout, "%s\n", dest);
 
@@ -124,6 +122,9 @@ full_mode(void)
 		perror("full_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
+	/* TODO
+	 * add function append_string with string formatting
+	 */
 
 	/* get translation */
 	cJSON *tr = cJSON_GetArrayItem(parser, 0);
@@ -132,41 +133,39 @@ full_mode(void)
 	cJSON_ArrayForEach(iterator, tr) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value)) {
-			string = string_append(string, "> ");
-			string = string_append(string, value->next->valuestring);
-			string = string_append(string, "\n  -> ");
-			string = string_append(string, value->valuestring);
+			string_append(&string, value->valuestring);
 		}
 		count++;
 	}
 
 	/* get pronounce */
 	cJSON *pr = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
-	if (cJSON_GetArraySize(pr) == 4) {
-		char *pr_val = cJSON_GetArrayItem(pr, 3)->valuestring;
-		string = string_append(string, "\n >> Pronounce: "); 
-		string = string_append(string, pr_val); 
+	cJSON *tmp_pr = cJSON_GetArrayItem(pr, 3);
+	if (!cJSON_IsNull(tmp_pr)) {
+		string_append(&string, "\n\n[Pronounce]: ");
+		string_append(&string, tmp_pr->valuestring);
 	}
-
-	fprintf(stdout, "%s\n", string);
-
 
 	cJSON *word = cJSON_GetArrayItem(parser, 1);
 	char *tmp_lbl = NULL;
-	cJSON *arr_tmp = NULL;
+	cJSON *tmp = NULL;
 
 	/* get noun, verb, ...*/
 	cJSON_ArrayForEach(iterator, word) {
 		tmp_lbl = iterator->child->valuestring;
 		tmp_lbl[0] -= 32;  /* upper case */
-		fprintf(stdout, "\n%s:\n", tmp_lbl);
+		string_append(&string, "\n\n[");
+		string_append(&string, tmp_lbl);
+		string_append(&string, "]: \n  ");
 
 		/* list noun, verb, ... */
-		arr_tmp = iterator->child->next;
-		fprintf(stdout, "%s", replace_to(cJSON_Print(arr_tmp), '\"', ' '));
-
+		cJSON_ArrayForEach(tmp, cJSON_GetArrayItem(iterator, 1)) {
+			string_append(&string, tmp->valuestring);
+			string_append(&string, ", ");
+		}
+		string[strlen(string)-2] = ' ';
 	}
-	puts("");
+	fprintf(stdout, "%s\n", string);
 
 cleanup:
 	cJSON_Delete(parser);
