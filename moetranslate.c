@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <curl/curl.h>
 
 #include "lib/cJSON.h"
@@ -20,14 +21,14 @@ struct Lang {
 	int	mode;	/* mode translation */
 } __attribute__((__packed__));
 
-struct Memory{
+struct Memory {
 	char	*memory;
 	size_t	size;
 };
 
 /* function declaration */
 /* static char *replace_to(char *str, char i, char c); */
-static char *string_append(char **dest, const char *str);
+static char *string_append(char **dest, const char *fmt, ...);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
@@ -59,21 +60,43 @@ replace_to(char *str, char i, char c)
 }
 */
 
-/* TODO
- * add function append_string with string formatting
- */
 static char *
-string_append(char **dest, const char *str)
+string_append(char **dest, const char *fmt, ...)
 {
-	char *tmp;
-	size_t len = strlen(str);
+	char *tmp_p	= NULL;
+	char *tmp_dest	= NULL;
+	size_t size	= 0;
+	int n		= 0;
+	va_list vargs;
 
-	if (!(tmp = realloc((*dest), (strlen(*dest) + len) +1))) {
-		return (*dest);
-	}
-	(*dest) = tmp;
-	strncat((*dest), str, len);
+	/* determine required size */
+	va_start(vargs, fmt);
+	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
 
+	if (n < 0)
+		goto cleanup;
+
+	size = (size_t)n +1; /* one extra byte for '\0' */
+	if (!(tmp_p = malloc(size)))
+		goto cleanup;
+
+	va_start(vargs, fmt);
+	n = vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
+
+	if (n < 0)
+		goto cleanup;
+
+	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
+		goto cleanup;
+
+	(*dest) = tmp_dest;
+	strncat((*dest), tmp_p, size -1); /* -1 ( without '\0') */
+
+cleanup:
+	if (tmp_p)
+		free(tmp_p);
 	return (*dest);
 }
 
@@ -129,15 +152,12 @@ full_mode(void)
 	/* get translation */
 	cJSON *tr = cJSON_GetArrayItem(parser, 0);
 	int count = 0;
-	//const char *format = "> %s\n -> %s\n\n";
 	
-	string_append(&string, "\"");
-	string_append(&string, lang.text);
-	string_append(&string, "\"\n\n");
+	string_append(&string, "\"%s\"\n\n", lang.text);
 	cJSON_ArrayForEach(iterator, tr) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value)) {
-			string_append(&string, value->valuestring);
+			string_append(&string, "%s", value->valuestring);
 		}
 		count++;
 	}
@@ -147,15 +167,12 @@ full_mode(void)
 	cJSON *tmp_spl;
 	if (cJSON_GetArraySize(spelling) < 6) {
 		string_append(&string, "\n\n[Spelling]: ");
-		//string_append(&string, "\n\n");
 		cJSON_ArrayForEach(tmp_spl, spelling) {
 			if (cJSON_IsNull(tmp_spl) ||
 					cJSON_IsNumber(tmp_spl) ||
 						cJSON_IsArray(tmp_spl))
 				continue;
-			string_append(&string, "\n  ( ");
-			string_append(&string, tmp_spl->valuestring);
-			string_append(&string, " )");
+			string_append(&string, "\n ( %s )", tmp_spl->valuestring);
 		}
 	}
 
@@ -168,14 +185,11 @@ full_mode(void)
 		if (strlen(tmp_lbl) == 0)
 			continue;
 		tmp_lbl[0] -= 32;  /* upper case */
-		string_append(&string, "\n\n[");
-		string_append(&string, tmp_lbl);
-		string_append(&string, "]: \n  ");
+		string_append(&string, "\n\n[%s]: \n  ", tmp_lbl);
 
 		/* list noun, verb, ... */
 		cJSON_ArrayForEach(tmp, cJSON_GetArrayItem(iterator, 1)) {
-			string_append(&string, tmp->valuestring);
-			string_append(&string, ", ");
+			string_append(&string, "%s, ", tmp->valuestring);
 		}
 		string[strlen(string)-2] = ' ';
 	}
