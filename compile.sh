@@ -1,3 +1,3 @@
 #!/bin/sh
 
-cc -Wall -Wextra moetranslate.c cJSON.c  -lcurl -o moetranslate
+cc -g -Wall -Wextra moetranslate.c lib/cJSON.c  -lcurl -o moetranslate

@@ -1,15 +1,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <curl/curl.h>
 
-#include "cJSON.h"
+#include "lib/cJSON.h"
 
 
 /* macros */
-#define SUM_LEN_STRING(A, B, C, D) \
-	((strlen(A)) + (strlen(B)) + (strlen(C)) + (strlen(D)))
-
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
@@ -20,12 +18,14 @@ struct Lang {
 	int	mode;	/* mode translation */
 } __attribute__((__packed__));
 
-struct Memory{
+struct Memory {
 	char	*memory;
 	size_t	size;
 };
 
 /* function declaration */
+/* static inline char *replace_to(char *str, char i, char c); */
+static inline char *string_append(char **dest, const char *fmt, ...);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
@@ -33,38 +33,88 @@ static char *request_handler(void);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
+static long timeout		= 10L; /* set request timout (10s) */
 static struct Lang lang;
-static long timeout		= 10L; /* set timeout request (10s) */
-static const char url_google[]	= "https://translate.google.com/translate_a/single?";
+static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
-		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qc&sl=%s&tl=%s&hl=id&q=%s"
+		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
 /* function implementations */
+/* Probably we need this function later */
+/*
+static inline char *
+replace_to(char *str, char i, char c)
+{
+	char *dest = str;
+	while (*str) {
+		if (*str == i)
+			*str = c;
+		str++;
+	}
+	return dest;
+}
+*/
+
+static inline char *
+string_append(char **dest, const char *fmt, ...)
+{
+	char *tmp_p	= NULL;
+	char *tmp_dest	= NULL;
+	int n		= 0;
+	size_t size	= 0;
+	va_list vargs;
+
+	/* determine required size */
+	va_start(vargs, fmt);
+	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
+
+	if (n < 0)
+		goto cleanup;
+
+	size = (size_t)n +1; /* one extra byte for '\0' */
+	if (!(tmp_p = malloc(size)))
+		goto cleanup;
+
+	va_start(vargs, fmt);
+	n = vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
+
+	if (n < 0)
+		goto cleanup;
+	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
+		goto cleanup;
+
+	(*dest) = tmp_dest;
+	strncat((*dest), tmp_p, size -1); /* -1 ( without '\0') */
+
+cleanup:
+	if (tmp_p)
+		free(tmp_p);
+	return (*dest);
+}
+
 static void
 brief_mode(void)
 {
 	char *dest = NULL;
-	cJSON *parser, *array, *iterator, *value;
+	cJSON *parser, *iterator, *value;
 
 	if (!(dest = request_handler()))
 		exit(1);
 
-	/* JSON parser */
-	/* dest[i][0][0] */
+	/* cJSON parser */
 	if (!(parser = cJSON_Parse(dest))) {
 		perror("brief_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
-	if (!(array = cJSON_GetArrayItem(parser, 0))) {
-		perror("brief_mode(): cJSON_GetArrayItem()");
-		goto cleanup;
-	}
 
-	cJSON_ArrayForEach(iterator, array) {
-		value = cJSON_GetArrayItem(iterator, 0);
+	/* dest[i][0][0] */
+	cJSON_ArrayForEach(iterator, cJSON_GetArrayItem(parser,0)) {
+		value = cJSON_GetArrayItem(iterator, 0); /* index: 0 */
 		if (cJSON_IsString(value))
 			/* show the result to stdout */
 			fprintf(stdout, "%s", cJSON_GetStringValue(value));
@@ -79,27 +129,94 @@ cleanup:
 static void
 full_mode(void)
 {
-	char *dest = NULL;
+	char *dest	= NULL;
+	char *string	= NULL;
+	cJSON *parser, *iterator;
+	cJSON *translated, *spell, *other, *example;
 
 	/* init curl session */
 	if (!(dest = request_handler()))
 		exit(1);
 	
-	/* TODO 
-	 * full mode json parser
-	 */
-	fprintf(stdout, "%s", dest);
+	/* test  */
+	//fprintf(stdout, "%s\n", dest);
 
-	free(dest);
+	/* cJSON parser */
+	if (!(parser = cJSON_Parse(dest))) {
+		perror("full_mode(): cJSON_Parse()");
+		goto cleanup;
+	}
+
+	string = calloc(sizeof(char), sizeof(char));
+
+	/* get translation */
+	cJSON *value;
+	int count	= 0;
+	translated	= cJSON_GetArrayItem(parser, 0);
+	
+	string_append(&string, "\"%s\"\n\n", lang.text);
+	cJSON_ArrayForEach(iterator, translated) {
+		value = cJSON_GetArrayItem(iterator, 0);
+		if (cJSON_IsString(value)) {
+			string_append(&string, "%s", value->valuestring);
+		}
+		count++;
+	}
+
+	/* get spelling */
+	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
+	cJSON *spell_val;
+	if (cJSON_GetArraySize(spell) < 6) {
+		string_append(&string, "\n");
+		cJSON_ArrayForEach(spell_val, spell) {
+			if (cJSON_IsNull(spell_val) ||
+				cJSON_IsNumber(spell_val) ||
+				cJSON_IsArray(spell_val)) {
+				continue;
+			}
+			string_append(&string, "\n ( %s )", spell_val->valuestring);
+		}
+	}
+
+	/* get noun, verb, ...*/
+	other = cJSON_GetArrayItem(parser, 1);
+	char *other_lbl = NULL;
+	cJSON *other_val = NULL;
+	cJSON_ArrayForEach(iterator, other) {
+		other_lbl = iterator->child->valuestring;
+		if (strlen(other_lbl) == 0)
+			continue;
+		other_lbl[0] -= 32;  /* upper case */
+		string_append(&string, "\n\n[%s]: \n  ", other_lbl);
+
+		/* list noun, verb, ... */
+		cJSON_ArrayForEach(other_val, cJSON_GetArrayItem(iterator, 1)) {
+			string_append(&string, "%s, ", other_val->valuestring);
+		}
+		string[strlen(string)-2] = ' ';
+	}
+
+	/* TODO 
+	 * get the examples
+	 */
+	(void)example;
+
+	/* print to stdout */
+	fprintf(stdout, "%s\n", string);
+
+cleanup:
+	cJSON_Delete(parser);
+	if (dest)
+		free(dest);
+	if (string)
+		free(string);
 }
 
 static char *
 url_parser(CURL *curl)
 {
 	char *ret		= NULL;
-	char *tmp		= NULL;
 	char *text_encoding	= NULL;
-	size_t length_opt;
 
 	/* text encoding */
 	text_encoding = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
@@ -108,36 +225,13 @@ url_parser(CURL *curl)
 		return NULL;
 	}
 
-	length_opt = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
-			url_params[lang.mode]) -5; /* sum(%s%s%s) == 6 chars */
+	ret = calloc(sizeof(char), 1);
+	string_append(&ret, "%s", url_google);
+	string_append(&ret, url_params[lang.mode],
+			lang.src, lang.dest, text_encoding);
 
-	char options[length_opt];
-
-	/* formatting string */
-	snprintf(options, length_opt,
-			url_params[lang.mode], lang.src, lang.dest, text_encoding);
-
-	options[length_opt] = '\0';
-
-	if (!(tmp = strndup(url_google, strlen(url_google)))) {
-		perror("url_parser(): strndup");
-		goto cleanup;
-	}
-
-	if (!(ret = realloc(tmp, strlen(tmp) + length_opt +1))) {
-		perror("url_parser(): realloc");
-		free(tmp);
-		goto cleanup;
-	}
-
-	/* concat between url_google and options */
-	strncat(ret, options, length_opt);
-
-cleanup:
 	curl_free(text_encoding);
-	if (ret)
-		return ret;
-	return NULL;
+	return ret;
 }
 
 static char *
@@ -145,7 +239,7 @@ request_handler(void)
 {
 	char *url		= NULL;
 	CURL *curl		= NULL;
-	struct Memory mem	= {NULL, 0};
+	struct Memory mem	= {.memory = NULL, .size = 0};
 	CURLcode ccode;
 
 	/* curl init */
