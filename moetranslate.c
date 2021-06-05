@@ -8,9 +8,6 @@
 
 
 /* macros */
-#define SUM_LEN_STRING(A, B, C, D) \
-	((strlen(A)) + (strlen(B)) + (strlen(C)) + (strlen(D)))
-
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
@@ -27,8 +24,8 @@ struct Memory {
 };
 
 /* function declaration */
-/* static char *replace_to(char *str, char i, char c); */
-static char *string_append(char **dest, const char *fmt, ...);
+/* static inline char *replace_to(char *str, char i, char c); */
+static inline char *string_append(char **dest, const char *fmt, ...);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
@@ -36,8 +33,8 @@ static char *request_handler(void);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
-static struct Lang lang;
 static long timeout		= 10L; /* set request timout (10s) */
+static struct Lang lang;
 static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
@@ -46,8 +43,9 @@ static const char *url_params[]	= {
 };
 
 /* function implementations */
+/* Probably we need this function later */
 /*
-static char *
+static inline char *
 replace_to(char *str, char i, char c)
 {
 	char *dest = str;
@@ -60,13 +58,13 @@ replace_to(char *str, char i, char c)
 }
 */
 
-static char *
+static inline char *
 string_append(char **dest, const char *fmt, ...)
 {
 	char *tmp_p	= NULL;
 	char *tmp_dest	= NULL;
-	size_t size	= 0;
 	int n		= 0;
+	size_t size	= 0;
 	va_list vargs;
 
 	/* determine required size */
@@ -87,7 +85,6 @@ string_append(char **dest, const char *fmt, ...)
 
 	if (n < 0)
 		goto cleanup;
-
 	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
 		goto cleanup;
 
@@ -132,9 +129,10 @@ cleanup:
 static void
 full_mode(void)
 {
-	char *dest = NULL;
-	char *string = calloc(sizeof(char), 1);
-	cJSON *parser, *iterator, *value;
+	char *dest	= NULL;
+	char *string	= NULL;
+	cJSON *parser, *iterator;
+	cJSON *translated, *spell, *other, *example;
 
 	/* init curl session */
 	if (!(dest = request_handler()))
@@ -149,12 +147,15 @@ full_mode(void)
 		goto cleanup;
 	}
 
+	string = calloc(sizeof(char), sizeof(char));
+
 	/* get translation */
-	cJSON *tr = cJSON_GetArrayItem(parser, 0);
-	int count = 0;
+	cJSON *value;
+	int count	= 0;
+	translated	= cJSON_GetArrayItem(parser, 0);
 	
 	string_append(&string, "\"%s\"\n\n", lang.text);
-	cJSON_ArrayForEach(iterator, tr) {
+	cJSON_ArrayForEach(iterator, translated) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value)) {
 			string_append(&string, "%s", value->valuestring);
@@ -163,36 +164,44 @@ full_mode(void)
 	}
 
 	/* get spelling */
-	cJSON *spelling = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
-	cJSON *tmp_spl;
-	if (cJSON_GetArraySize(spelling) < 6) {
-		string_append(&string, "\n\n[Spelling]: ");
-		cJSON_ArrayForEach(tmp_spl, spelling) {
-			if (cJSON_IsNull(tmp_spl) ||
-					cJSON_IsNumber(tmp_spl) ||
-						cJSON_IsArray(tmp_spl))
+	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
+	cJSON *spell_val;
+	if (cJSON_GetArraySize(spell) < 6) {
+		string_append(&string, "\n");
+		cJSON_ArrayForEach(spell_val, spell) {
+			if (cJSON_IsNull(spell_val) ||
+				cJSON_IsNumber(spell_val) ||
+				cJSON_IsArray(spell_val)) {
 				continue;
-			string_append(&string, "\n ( %s )", tmp_spl->valuestring);
+			}
+			string_append(&string, "\n ( %s )", spell_val->valuestring);
 		}
 	}
 
 	/* get noun, verb, ...*/
-	cJSON *word = cJSON_GetArrayItem(parser, 1);
-	char *tmp_lbl = NULL;
-	cJSON *tmp = NULL;
-	cJSON_ArrayForEach(iterator, word) {
-		tmp_lbl = iterator->child->valuestring;
-		if (strlen(tmp_lbl) == 0)
+	other = cJSON_GetArrayItem(parser, 1);
+	char *other_lbl = NULL;
+	cJSON *other_val = NULL;
+	cJSON_ArrayForEach(iterator, other) {
+		other_lbl = iterator->child->valuestring;
+		if (strlen(other_lbl) == 0)
 			continue;
-		tmp_lbl[0] -= 32;  /* upper case */
-		string_append(&string, "\n\n[%s]: \n  ", tmp_lbl);
+		other_lbl[0] -= 32;  /* upper case */
+		string_append(&string, "\n\n[%s]: \n  ", other_lbl);
 
 		/* list noun, verb, ... */
-		cJSON_ArrayForEach(tmp, cJSON_GetArrayItem(iterator, 1)) {
-			string_append(&string, "%s, ", tmp->valuestring);
+		cJSON_ArrayForEach(other_val, cJSON_GetArrayItem(iterator, 1)) {
+			string_append(&string, "%s, ", other_val->valuestring);
 		}
 		string[strlen(string)-2] = ' ';
 	}
+
+	/* TODO 
+	 * get the examples
+	 */
+	(void)example;
+
+	/* print to stdout */
 	fprintf(stdout, "%s\n", string);
 
 cleanup:
@@ -207,9 +216,7 @@ static char *
 url_parser(CURL *curl)
 {
 	char *ret		= NULL;
-	char *tmp		= NULL;
 	char *text_encoding	= NULL;
-	size_t length_opt;
 
 	/* text encoding */
 	text_encoding = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
@@ -218,36 +225,13 @@ url_parser(CURL *curl)
 		return NULL;
 	}
 
-	length_opt = SUM_LEN_STRING(text_encoding, lang.src, lang.dest,
-			url_params[lang.mode]) -5; /* sum(%s%s%s) == 6 chars */
+	ret = calloc(sizeof(char), 1);
+	string_append(&ret, "%s", url_google);
+	string_append(&ret, url_params[lang.mode],
+			lang.src, lang.dest, text_encoding);
 
-	char options[length_opt];
-
-	/* formatting string */
-	snprintf(options, length_opt,
-			url_params[lang.mode], lang.src, lang.dest, text_encoding);
-
-	options[length_opt] = '\0';
-
-	if (!(tmp = strndup(url_google, strlen(url_google)))) {
-		perror("url_parser(): strndup");
-		goto cleanup;
-	}
-
-	if (!(ret = realloc(tmp, strlen(tmp) + length_opt +1))) {
-		perror("url_parser(): realloc");
-		free(tmp);
-		goto cleanup;
-	}
-
-	/* concat between url_google and options */
-	strncat(ret, options, length_opt);
-
-cleanup:
 	curl_free(text_encoding);
-	if (ret)
-		return ret;
-	return NULL;
+	return ret;
 }
 
 static char *
@@ -255,7 +239,7 @@ request_handler(void)
 {
 	char *url		= NULL;
 	CURL *curl		= NULL;
-	struct Memory mem	= {NULL, 0};
+	struct Memory mem	= {.memory = NULL, .size = 0};
 	CURLcode ccode;
 
 	/* curl init */
