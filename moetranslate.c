@@ -24,7 +24,8 @@ struct Memory {
 };
 
 /* function declaration */
-/* static inline char *replace_to(char *str, char i, char c); */
+//static inline char *replace_to(char *str, char i, char c);
+static inline char *html_cleaner(char **dest);
 static inline char *string_append(char **dest, const char *fmt, ...);
 static void brief_mode(void);
 static void full_mode(void);
@@ -38,12 +39,11 @@ static struct Lang lang;
 static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
-	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=x&dt=ld&dt=md&dt=rw&"
+	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&"
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
 /* function implementations */
-/* Probably we need this function later */
 /*
 static inline char *
 replace_to(char *str, char i, char c)
@@ -57,6 +57,34 @@ replace_to(char *str, char i, char c)
 	return dest;
 }
 */
+
+/* test */
+static inline char *
+html_cleaner(char **dest)
+{
+	char *p		= (*dest);
+	int i		= 0;
+	char *tmp	= NULL;
+	
+	if (!(tmp = calloc(sizeof(char), strlen(*dest)+1)))
+		return (*dest);
+
+	while (*p) {
+		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>') {
+			p += 3;
+		} else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
+			       	*(p+3) == '>') {
+			p += 4;
+		}
+		tmp[i] = (*p);
+		i++;
+		p++;
+	}
+	free(*dest);
+	(*dest) = tmp;
+
+	return (*dest);
+}
 
 static inline char *
 string_append(char **dest, const char *fmt, ...)
@@ -85,11 +113,12 @@ string_append(char **dest, const char *fmt, ...)
 
 	if (n < 0)
 		goto cleanup;
+
 	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
 		goto cleanup;
 
 	(*dest) = tmp_dest;
-	strncat((*dest), tmp_p, size -1); /* -1 ( without '\0') */
+	strncat((*dest), tmp_p, size -1);
 
 cleanup:
 	if (tmp_p)
@@ -147,17 +176,18 @@ full_mode(void)
 		goto cleanup;
 	}
 
-	string = calloc(sizeof(char), sizeof(char));
+	if (!(string = calloc(sizeof(char), sizeof(char))))
+		goto cleanup;
 
 	/* get translation */
 	cJSON *value;
 	int count	= 0;
 	translated	= cJSON_GetArrayItem(parser, 0);
 	
-	string_append(&string, "\"%s\"\n\n", lang.text);
 	cJSON_ArrayForEach(iterator, translated) {
 		value = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(value)) {
+			string_append(&string, "\"%s\"\n\n", value->next->valuestring);
 			string_append(&string, "%s", value->valuestring);
 		}
 		count++;
@@ -186,7 +216,8 @@ full_mode(void)
 		other_lbl = iterator->child->valuestring;
 		if (strlen(other_lbl) == 0)
 			continue;
-		other_lbl[0] -= 32;  /* upper case */
+
+		other_lbl[0] -= 32;  /* upper case (first letter) */
 		string_append(&string, "\n\n[%s]: \n  ", other_lbl);
 
 		/* list noun, verb, ... */
@@ -199,7 +230,22 @@ full_mode(void)
 	/* TODO 
 	 * get the examples
 	 */
-	(void)example;
+	char *exmpl = calloc(sizeof(char), sizeof(char));
+	example = cJSON_GetArrayItem(parser, 13);
+	cJSON *example_val = NULL;
+	if (!cJSON_IsNull(example)) {
+		string_append(&exmpl, "\n\n---------------------------");
+		cJSON_ArrayForEach(iterator, example) {
+			cJSON_ArrayForEach(example_val, iterator) {
+				string_append(&exmpl, "\n\"%s\"",
+						example_val->child->valuestring);
+			}
+			html_cleaner(&exmpl);
+			
+		}
+	}
+	string_append(&string, exmpl);
+	free(exmpl);
 
 	/* print to stdout */
 	fprintf(stdout, "%s\n", string);
@@ -216,21 +262,25 @@ static char *
 url_parser(CURL *curl)
 {
 	char *ret		= NULL;
-	char *text_encoding	= NULL;
+	char *text_encode	= NULL;
 
 	/* text encoding */
-	text_encoding = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
-	if (!text_encoding) {
+	text_encode = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
+	if (!text_encode) {
 		perror("url_parser(): curl_easy_escape()");
 		return NULL;
 	}
 
-	ret = calloc(sizeof(char), 1);
+	if (!(ret = calloc(sizeof(char), 1)))
+		goto cleanup;
+
 	string_append(&ret, "%s", url_google);
 	string_append(&ret, url_params[lang.mode],
-			lang.src, lang.dest, text_encoding);
+			lang.src, lang.dest, text_encode);
 
-	curl_free(text_encoding);
+cleanup:
+	curl_free(text_encode);
+
 	return ret;
 }
 
