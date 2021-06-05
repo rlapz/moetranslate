@@ -321,7 +321,7 @@ url_parser(CURL *curl)
 		return NULL;
 	}
 
-	if (!(ret = calloc(sizeof(char), 1)))
+	if (!(ret = STRING_NEW()))
 		goto cleanup;
 
 	string_append(&ret, "%s", url_google);
