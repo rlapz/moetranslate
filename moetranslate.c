@@ -8,14 +8,15 @@
 
 
 /* macros */
+#define STRING_NEW() (calloc(sizeof(char), sizeof(char)))
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
 struct Lang {
+	int	mode;	/* mode translation */
 	char	*src;	/* source language */
 	char	*dest;	/* target language */
 	char	*text;	/* text/words */
-	int	mode;	/* mode translation */
 } __attribute__((__packed__));
 
 struct Memory {
@@ -70,12 +71,11 @@ html_cleaner(char **dest)
 		return (*dest);
 
 	while (*p) {
-		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>') {
+		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>')
 			p += 3;
-		} else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
-			       	*(p+3) == '>') {
+		else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
+			       	*(p+3) == '>')
 			p += 4;
-		}
 		tmp[i] = (*p);
 		i++;
 		p++;
@@ -145,7 +145,7 @@ brief_mode(void)
 	cJSON_ArrayForEach(iterator, cJSON_GetArrayItem(parser,0)) {
 		value = cJSON_GetArrayItem(iterator, 0); /* index: 0 */
 		if (cJSON_IsString(value))
-			/* show the result to stdout */
+			/* send the result to stdout */
 			fprintf(stdout, "%s", cJSON_GetStringValue(value));
 	}
 	puts("");
@@ -158,10 +158,18 @@ cleanup:
 static void
 full_mode(void)
 {
-	char *dest	= NULL;
-	char *string	= NULL;
+	char *dest		= NULL;
+	char *result		= NULL;
+	char *trans_src		= NULL;
+	char *trans_dest	= NULL;
+	char *spell_str		= NULL;
+	char *lang_str		= NULL;
+	char *syn_str		= NULL;
+	char *example_str	= NULL;
+
 	cJSON *parser, *iterator;
-	cJSON *translated, *spell, *other, *example;
+	cJSON *trans, *spell, *synonym, *example, *langdest;
+	cJSON *trans_val, *syn_val1, *syn_val2, *example_val;
 
 	/* init curl session */
 	if (!(dest = request_handler()))
@@ -176,86 +184,128 @@ full_mode(void)
 		goto cleanup;
 	}
 
-	if (!(string = calloc(sizeof(char), sizeof(char))))
+	if (!(result = STRING_NEW()))
 		goto cleanup;
 
+	/* cJSON Parser */
 	/* get translation */
-	cJSON *value;
-	int count	= 0;
-	translated	= cJSON_GetArrayItem(parser, 0);
-	
-	cJSON_ArrayForEach(iterator, translated) {
-		value = cJSON_GetArrayItem(iterator, 0);
-		if (cJSON_IsString(value)) {
-			string_append(&string, "\"%s\"\n\n", value->next->valuestring);
-			string_append(&string, "%s", value->valuestring);
+	int count = 0;
+	trans = cJSON_GetArrayItem(parser, 0);
+	if (!(trans_src = STRING_NEW()))
+		goto cleanup;
+	if (!(trans_dest = STRING_NEW()))
+		goto cleanup;
+	cJSON_ArrayForEach(iterator, trans) {
+		trans_val = cJSON_GetArrayItem(iterator, 0);
+		if (cJSON_IsString(trans_val)) {
+			string_append(&trans_dest, "\033[1m\033[37m%s\033[0m",
+					trans_val->valuestring);
+			string_append(&trans_src, "%s",
+					trans_val->next->valuestring);
 		}
 		count++;
 	}
 
 	/* get spelling */
-	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser,0), count -1);
-	cJSON *spell_val;
+	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0), count -1);
 	if (cJSON_GetArraySize(spell) < 6) {
-		string_append(&string, "\n");
-		cJSON_ArrayForEach(spell_val, spell) {
-			if (cJSON_IsNull(spell_val) ||
-				cJSON_IsNumber(spell_val) ||
-				cJSON_IsArray(spell_val)) {
+		if (!(spell_str = STRING_NEW()))
+			goto cleanup;
+		cJSON_ArrayForEach(iterator, spell) {
+			if (cJSON_IsNull(iterator) ||
+					cJSON_IsNumber(iterator) ||
+					cJSON_IsArray(iterator)) {
 				continue;
 			}
-			string_append(&string, "\n ( %s )", spell_val->valuestring);
+			string_append(&spell_str, "( %s )",
+						iterator->valuestring);
 		}
 	}
 
-	/* get noun, verb, ...*/
-	other = cJSON_GetArrayItem(parser, 1);
-	char *other_lbl = NULL;
-	cJSON *other_val = NULL;
-	cJSON_ArrayForEach(iterator, other) {
-		other_lbl = iterator->child->valuestring;
-		if (strlen(other_lbl) == 0)
-			continue;
-
-		other_lbl[0] -= 32;  /* upper case (first letter) */
-		string_append(&string, "\n\n[%s]: \n  ", other_lbl);
-
-		/* list noun, verb, ... */
-		cJSON_ArrayForEach(other_val, cJSON_GetArrayItem(iterator, 1)) {
-			string_append(&string, "%s, ", other_val->valuestring);
-		}
-		string[strlen(string)-2] = ' ';
+	/* get language */
+	langdest = cJSON_GetArrayItem(parser, count);
+	if (!(lang_str = STRING_NEW()))
+		goto cleanup;
+	if (cJSON_IsString(langdest)) {
+		string_append(&lang_str, "\n[%s]", langdest->valuestring);
 	}
 
-	/* TODO 
-	 * get the examples
-	 */
-	char *exmpl = calloc(sizeof(char), sizeof(char));
-	example = cJSON_GetArrayItem(parser, 13);
-	cJSON *example_val = NULL;
-	if (!cJSON_IsNull(example)) {
-		string_append(&exmpl, "\n\n---------------------------");
-		cJSON_ArrayForEach(iterator, example) {
-			cJSON_ArrayForEach(example_val, iterator) {
-				string_append(&exmpl, "\n\"%s\"",
-						example_val->child->valuestring);
+	/* get synonyms */
+	if (!(syn_str = STRING_NEW()))
+		goto cleanup;
+
+	synonym = cJSON_GetArrayItem(parser, 1);
+	cJSON_ArrayForEach(iterator, synonym) {
+		string_append(&syn_str, "\n\n\033[1m\033[37m[%s]:\033[0m",
+				iterator->child->valuestring);
+
+		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
+			string_append(&syn_str, "\n  \033[1m\033[37m%s:\033[0m\n",
+					syn_val1->child->valuestring);
+			string_append(&syn_str, "\t");
+			cJSON_ArrayForEach(syn_val2, cJSON_GetArrayItem(syn_val1, 1)) {
+				string_append(&syn_str, "%s, ", syn_val2->valuestring);
 			}
-			html_cleaner(&exmpl);
-			
+			syn_str[strlen(syn_str)-2] = ' ';
 		}
 	}
-	string_append(&string, exmpl);
-	free(exmpl);
+
+	/* get examples */
+	int max = 5;
+	example = cJSON_GetArrayItem(parser, 13);
+
+	if (!cJSON_IsNull(example)) {
+		if (!(example_str = STRING_NEW()))
+			goto cleanup;
+		cJSON_ArrayForEach(iterator, example ) {
+			cJSON_ArrayForEach(example_val, iterator) {
+				if (max == 0)
+					break;
+				string_append(&example_str, "\"%s\"\n",
+						example_val->child->valuestring);
+				max--;
+			}
+		}
+		html_cleaner(&example_str);
+	}
+	
+
+	/* experimental */
+	if (strlen(trans_src) < 1)
+		goto cleanup;
+
+	string_append(&result, "\"%s\"%s\n\n%s\n[%s]",
+			trans_src, lang_str, trans_dest, lang.dest);
+	if (spell_str)
+		string_append(&result, "\n\n%s\n", spell_str);
+	string_append(&result, "%s", syn_str);
+	if (example_str) {
+		string_append(&result, "\n\n%s\n",
+				"------------------------------");
+		string_append(&result, "%s", example_str);
+	}
 
 	/* print to stdout */
-	fprintf(stdout, "%s\n", string);
+	fprintf(stdout, "%s\n", result);
 
 cleanup:
 	cJSON_Delete(parser);
 	if (dest)
 		free(dest);
-	if (string)
-		free(string);
+	if (trans_src)
+		free(trans_src);
+	if (trans_dest)
+		free(trans_dest);
+	if (spell_str)
+		free(spell_str);
+	if (lang_str)
+		free(lang_str);
+	if (syn_str)
+		free(syn_str);
+	if (example_str)
+		free(example_str);
+	if (result)
+		free(result);
 }
 
 static char *
@@ -372,11 +422,12 @@ main(int argc, char *argv[])
 				"\t%s en id \"hello\"\n";
 	if (argc < 4) {
 		fprintf(stderr, help, argv[0], argv[0], argv[0]);
-		return 1;
+		return EXIT_FAILURE;
 	}
 
 	lang.src = argv[1];
 	lang.dest = argv[2];
+	lang.mode = BRIEF;
 
 	if (strcmp(argv[3], "-b") == 0) {
 		if (argv[4] == NULL || strlen(argv[4]) == 0) {
@@ -384,13 +435,17 @@ main(int argc, char *argv[])
 			return EXIT_FAILURE;
 		}
 		lang.text = argv[4];
-		lang.mode = BRIEF;
-		brief_mode();
 	} else {
 		lang.text = argv[3];
 		lang.mode = FULL;
-		full_mode();
 	}
+
+	if (lang.mode == FULL)
+		full_mode();
+	else
+		brief_mode();
+
 
 	return EXIT_SUCCESS;
 }
+
