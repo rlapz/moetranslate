@@ -234,7 +234,7 @@ full_mode(void)
 	example = cJSON_GetArrayItem(parser, 13);
 	cJSON *example_val = NULL;
 	if (!cJSON_IsNull(example)) {
-		string_append(&exmpl, "\n");
+		string_append(&exmpl, "\n\n---------------------------");
 		cJSON_ArrayForEach(iterator, example) {
 			cJSON_ArrayForEach(example_val, iterator) {
 				string_append(&exmpl, "\n\"%s\"",
