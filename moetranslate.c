@@ -1,3 +1,9 @@
+/* MIT License
+ *
+ * Copyright (c) 2021 Arthur Lapz (rLapz)
+ *
+ * See LICENSE file for license details
+ */
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -246,7 +252,7 @@ full_mode(void)
 			cJSON_ArrayForEach(syn_val2, cJSON_GetArrayItem(syn_val1, 1)) {
 				string_append(&syn_str, "%s, ", syn_val2->valuestring);
 			}
-			syn_str[strlen(syn_str)-2] = ' ';
+			syn_str[strlen(syn_str)-2] = '.';
 		}
 	}
 
