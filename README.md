@@ -38,5 +38,4 @@ https://cloud.google.com/translate/docs/languages
 
 
 ## TODO:
-1. Parse Full mode
-2. Add Yandex Translate API
+1. Add Yandex Translate API
