@@ -157,6 +157,8 @@ full_mode(void)
 	if (cJSON_IsString(correct->child)) {
 		string_append(&correct_str, "\nDid you mean: \"%s\"\n",
 				correct->child->next->valuestring);
+		memset(trans_src, 0, strlen(trans_src));
+		string_append(&trans_src, correct->child->next->valuestring);
 	}
 
 	/* get language */
