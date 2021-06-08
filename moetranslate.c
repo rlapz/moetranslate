@@ -21,7 +21,7 @@
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
-struct Lang {
+struct Translate {
 	int	mode;	/* mode translation */
 	char	*src;	/* source language */
 	char	*dest;	/* target language */
@@ -34,6 +34,8 @@ struct Memory {
 };
 
 /* function declaration */
+static char *ltrim(const char *str);
+static char *rtrim(char *str);
 static char *get_lang(const char *lcode);
 static void brief_mode(void);
 static void full_mode(void);
@@ -45,7 +47,7 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
 static long timeout		= 10L; /* set request timout (10s) */
-static struct Lang lang;
+static struct Translate tr;
 static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
@@ -54,7 +56,7 @@ static const char *url_params[]	= {
 };
 
 /* 17 109 */
-static const char *lang_code[109][17] = {
+static const char *const lang_code[109][17] = {
 	{"af", "Afrikaans"},	{"sq", "Albanian"},	{"am", "Amharic"},
 	{"ar", "Arabic"},	{"hy", "Armenian"},	{"az", "Azerbaijani"},
 	{"eu", "Basque"},	{"be", "Belarusian"},	{"bn", "Bengali"},
@@ -77,7 +79,7 @@ static const char *lang_code[109][17] = {
 	{"mk", "Macedonian"},	{"mg", "Malagasy"},	{"ms", "Malay"},
 	{"ml", "Malayam"},	{"mt", "Maltese"},	{"mi", "Maori"},
 	{"mr", "Marathi"},	{"mn", "Mongolian"},	{"my", "Myanmar"},
-	{"ne", "Nepali"},	{"no", "Norwebian"},	{"ny", "Nyanja"},
+	{"ne", "Nepali"},	{"no", "Norwegian"},	{"ny", "Nyanja"},
 	{"or", "Odia"},		{"ps", "Pashto"},	{"fa", "Persian"},
 	{"pl", "Polish"},	{"pt", "Portuguese"},	{"pa", "Punjabi"},
 	{"ro", "Romanian"},	{"ru", "Russian"},	{"sm", "Samoan"},
@@ -95,6 +97,27 @@ static const char *lang_code[109][17] = {
 };
 
 /* function implementations */
+/* left trimming */
+static char *
+ltrim(const char *str)
+{
+	while (isspace(*str))
+		str++;
+	return (char*)str;
+}
+
+/* right trimming */
+static char *
+rtrim(char *str)
+{
+	char *end = str + strlen(str) -1;
+	while (end > str && isspace(*end)) {
+		*end = '\0';
+		end--;
+	}
+	return str;
+}
+
 static char *
 get_lang(const char *lcode)
 {
@@ -103,7 +126,6 @@ get_lang(const char *lcode)
 		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
 			return (char*)lang_code[i][1];
 	}
-
 	return NULL;
 }
 
@@ -167,7 +189,7 @@ full_mode(void)
 
 	/* cJSON Parser */
 	/* get translation */
-	int count = 0;
+	int count_tr = 0;
 	trans = cJSON_GetArrayItem(parser, 0);
 	if (!(trans_src = STRING_NEW()))
 		goto cleanup;
@@ -181,11 +203,12 @@ full_mode(void)
 			string_append(&trans_src, "%s",
 					trans_val->next->valuestring);
 		}
-		count++;
+		count_tr++;
 	}
 
 	/* get spelling */
-	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0), count -1);
+	int count_spell = 0;
+	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0), count_tr -1);
 	if (!(spell_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_GetArraySize(spell) < 6) {
@@ -198,8 +221,10 @@ full_mode(void)
 			}
 			string_append(&spell_str, "( %s )",
 						iterator->valuestring);
+			count_spell++;
 		}
-		string_append(&spell_str, "\n");
+		if (count_spell > 0)
+			string_append(&spell_str, "\n");
 	}
 
 	/* get correction */
@@ -210,14 +235,14 @@ full_mode(void)
 		free(trans_src);
 		if (!(trans_src = STRING_NEW()))
 			goto cleanup;
-		string_append(&correct_str, "\nDid you mean: \"%s\"\n",
+		string_append(&correct_str, "\nDid you mean: \"%s\"?\n",
 				correct->child->next->valuestring);
 		string_append(&trans_src, correct->child->next->valuestring);
 	}
 
 	/* get language */
-	langdest = cJSON_GetArrayItem(parser, 2);
 	char *lang_v = NULL;
+	langdest = cJSON_GetArrayItem(parser, 2);
 	if (!(lang_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(langdest)) {
@@ -229,13 +254,18 @@ full_mode(void)
 
 	/* get synonyms */
 	char *syn_tmp;
+	int count_syn = 0;
 	synonym = cJSON_GetArrayItem(parser, 1);
 	if (!(syn_str = STRING_NEW()))
 		goto cleanup;
 	cJSON_ArrayForEach(iterator, synonym) {
 		syn_tmp = iterator->child->valuestring;
 		syn_tmp[0] = toupper(syn_tmp[0]);
-		string_append(&syn_str, "\n\n\033[1m\033[37m[%s]:\033[0m",
+
+		if (count_syn > 0)
+			string_append(&syn_str, "\n");
+
+		string_append(&syn_str, "\n\033[1m\033[37m[%s]:\033[0m",
 				syn_tmp);
 
 		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
@@ -250,7 +280,10 @@ full_mode(void)
 			}
 			syn_str[strlen(syn_str)-2] = '.';
 		}
+		count_syn++;
 	}
+	if (count_syn > 0)
+		string_append(&syn_str, "\n");
 
 	/* get examples */
 	int max = 5; /* examples max */
@@ -258,7 +291,7 @@ full_mode(void)
 	if (!(example_str = STRING_NEW()))
 		goto cleanup;
 	if (!cJSON_IsNull(example)) {
-		string_append(&example_str, "\n\n%s\n",
+		string_append(&example_str, "\n%s\n",
 				"------------------------------------");
 		cJSON_ArrayForEach(iterator, example ) {
 			cJSON_ArrayForEach(example_val, iterator) {
@@ -278,10 +311,10 @@ full_mode(void)
 		goto cleanup;
 
 	/* print to stdout */
-	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s\n%s",
+	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s%s",
 			correct_str,
 			trans_src, lang_str, trans_dest,
-			lang.dest, get_lang(lang.dest),
+			tr.dest, get_lang(tr.dest),
 			spell_str, syn_str, example_str);
 
 cleanup:
@@ -311,7 +344,7 @@ url_parser(CURL *curl)
 	char *text_encode	= NULL;
 
 	/* text encoding */
-	text_encode = curl_easy_escape(curl, lang.text, (int)strlen(lang.text));
+	text_encode = curl_easy_escape(curl, tr.text, (int)strlen(tr.text));
 	if (!text_encode) {
 		perror("url_parser(): curl_easy_escape()");
 		return NULL;
@@ -321,8 +354,8 @@ url_parser(CURL *curl)
 		goto cleanup;
 
 	string_append(&ret, "%s", url_google);
-	string_append(&ret, url_params[lang.mode],
-			lang.src, lang.dest, text_encode);
+	string_append(&ret, url_params[tr.mode],
+			tr.src, tr.dest, text_encode);
 
 cleanup:
 	curl_free(text_encode);
@@ -490,18 +523,18 @@ main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	lang.src = argv[1];
-	lang.dest = argv[2];
-	lang.mode = BRIEF;
+	tr.src = argv[1];
+	tr.dest = argv[2];
+	tr.mode = BRIEF;
 
-	if (strncmp(lang.src, "auto", 5) != 0) {
-		if (!get_lang(lang.src)) {
-			fprintf(stderr, "Unknown \"%s\" language code\n", lang.src);
+	if (strncmp(tr.src, "auto", 5) != 0) {
+		if (!get_lang(tr.src)) {
+			fprintf(stderr, "Unknown \"%s\" language code\n", tr.src);
 			return EXIT_FAILURE;
 		}
 	}
-	if (!get_lang(lang.dest)) {
-		fprintf(stderr, "Unknown \"%s\" language code\n", lang.dest);
+	if (!get_lang(tr.dest)) {
+		fprintf(stderr, "Unknown \"%s\" language code\n", tr.dest);
 		return EXIT_FAILURE;
 	}
 
@@ -510,13 +543,14 @@ main(int argc, char *argv[])
 			fprintf(stderr, help, argv[0], argv[0], argv[0]);
 			return EXIT_FAILURE;
 		}
-		lang.text = argv[4];
+		tr.text = argv[4];
 	} else {
-		lang.text = argv[3];
-		lang.mode = FULL;
+		tr.text = argv[3];
+		tr.mode = FULL;
 	}
 
-	if (lang.mode == FULL)
+	tr.text = ltrim((rtrim(tr.text)));
+	if (tr.mode == FULL)
 		full_mode();
 	else
 		brief_mode();
