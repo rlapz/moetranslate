@@ -26,17 +26,16 @@ moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
 
 
 1. Brief mode:
-	`./moetranslate auto id -b "Hello world\!"`
+	`moetranslate auto id -b "Hello world\!"`
 
 	`auto`	-> automatic detection
 	`id`	-> Indonsian language code
 2. Full mode:
-	`./moetranslate en id "Hello wrld\!"`
+	`moetranslate en id "Hello wrld\!"`
 
-	`en`	-> English US language code
+	`en`	-> English language code
 
-	Will show translated WORD/SENTENCE with autocorrection (if needed) and
-	more information.
+	Will show translated WORD/SENTENCE with	more information.
 
 ## Language Code:
 https://cloud.google.com/translate/docs/languages
