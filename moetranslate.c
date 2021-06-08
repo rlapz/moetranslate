@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <curl/curl.h>
@@ -31,13 +32,12 @@ struct Memory {
 };
 
 /* function declaration */
-//static inline char *replace_to(char *str, char i, char c);
-static inline char *html_cleaner(char **dest);
-static inline char *string_append(char **dest, const char *fmt, ...);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
 static char *request_handler(void);
+static inline char *html_cleaner(char **dest);
+static inline char *string_append(char **dest, const char *fmt, ...);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
@@ -51,98 +51,17 @@ static const char *url_params[]	= {
 };
 
 /* function implementations */
-/*
-static inline char *
-replace_to(char *str, char i, char c)
-{
-	char *dest = str;
-	while (*str) {
-		if (*str == i)
-			*str = c;
-		str++;
-	}
-	return dest;
-}
-*/
-
-/* test */
-static inline char *
-html_cleaner(char **dest)
-{
-	char *p		= (*dest);
-	int i		= 0;
-	char *tmp	= NULL;
-	
-	if (!(tmp = calloc(sizeof(char), strlen(*dest)+1)))
-		return (*dest);
-
-	while (*p) {
-		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>')
-			p += 3;
-		else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
-			       	*(p+3) == '>')
-			p += 4;
-		tmp[i] = (*p);
-		i++;
-		p++;
-	}
-	free(*dest);
-	(*dest) = tmp;
-
-	return (*dest);
-}
-
-static inline char *
-string_append(char **dest, const char *fmt, ...)
-{
-	char *tmp_p	= NULL;
-	char *tmp_dest	= NULL;
-	int n		= 0;
-	size_t size	= 0;
-	va_list vargs;
-
-	/* determine required size */
-	va_start(vargs, fmt);
-	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
-	va_end(vargs);
-
-	if (n < 0)
-		goto cleanup;
-
-	size = (size_t)n +1; /* one extra byte for '\0' */
-	if (!(tmp_p = malloc(size)))
-		goto cleanup;
-
-	va_start(vargs, fmt);
-	n = vsnprintf(tmp_p, size, fmt, vargs);
-	va_end(vargs);
-
-	if (n < 0)
-		goto cleanup;
-
-	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
-		goto cleanup;
-
-	(*dest) = tmp_dest;
-	strncat((*dest), tmp_p, size -1);
-
-cleanup:
-	if (tmp_p)
-		free(tmp_p);
-	return (*dest);
-}
-
 static void
 brief_mode(void)
 {
-	char *dest = NULL;
+	char *req_str = NULL;
 	cJSON *parser, *iterator, *value;
 
-	if (!(dest = request_handler()))
+	if (!(req_str = request_handler()))
 		exit(1);
 
 	/* cJSON parser */
-	if (!(parser = cJSON_Parse(dest))) {
+	if (!(parser = cJSON_Parse(req_str))) {
 		perror("brief_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
@@ -158,34 +77,35 @@ brief_mode(void)
 
 cleanup:
 	cJSON_Delete(parser);
-	free(dest);
+	free(req_str);
 }
 
 static void
 full_mode(void)
 {
-	char *dest		= NULL;
+	char *req_str		= NULL;
 	char *result		= NULL;
 	char *trans_src		= NULL;
 	char *trans_dest	= NULL;
 	char *spell_str		= NULL;
 	char *lang_str		= NULL;
+	char *correct_str	= NULL;
 	char *syn_str		= NULL;
 	char *example_str	= NULL;
 
 	cJSON *parser, *iterator;
-	cJSON *trans, *spell, *synonym, *example, *langdest;
+	cJSON *trans, *spell, *synonym, *correct, *example, *langdest;
 	cJSON *trans_val, *syn_val1, *syn_val2, *example_val;
 
 	/* init curl session */
-	if (!(dest = request_handler()))
+	if (!(req_str = request_handler()))
 		exit(1);
 	
 	/* test  */
-	//fprintf(stdout, "%s\n", dest);
+	//fprintf(stdout, "%s\n", req_str);
 
 	/* cJSON parser */
-	if (!(parser = cJSON_Parse(dest))) {
+	if (!(parser = cJSON_Parse(req_str))) {
 		perror("full_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
@@ -214,9 +134,10 @@ full_mode(void)
 
 	/* get spelling */
 	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0), count -1);
+	if (!(spell_str = STRING_NEW()))
+		goto cleanup;
 	if (cJSON_GetArraySize(spell) < 6) {
-		if (!(spell_str = STRING_NEW()))
-			goto cleanup;
+		string_append(&spell_str, "\n");
 		cJSON_ArrayForEach(iterator, spell) {
 			if (cJSON_IsNull(iterator) ||
 					cJSON_IsNumber(iterator) ||
@@ -226,10 +147,20 @@ full_mode(void)
 			string_append(&spell_str, "( %s )",
 						iterator->valuestring);
 		}
+		string_append(&spell_str, "\n");
+	}
+
+	/* get correction */
+	correct = cJSON_GetArrayItem(parser, 7);
+	if (!(correct_str = STRING_NEW()))
+		goto cleanup;
+	if (cJSON_IsString(correct->child)) {
+		string_append(&correct_str, "\nDid you mean: \"%s\"\n",
+				correct->child->next->valuestring);
 	}
 
 	/* get language */
-	langdest = cJSON_GetArrayItem(parser, count);
+	langdest = cJSON_GetArrayItem(parser, 2);
 	if (!(lang_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(langdest)) {
@@ -237,20 +168,25 @@ full_mode(void)
 	}
 
 	/* get synonyms */
+	char *syn_tmp;
+	synonym = cJSON_GetArrayItem(parser, 1);
 	if (!(syn_str = STRING_NEW()))
 		goto cleanup;
-
-	synonym = cJSON_GetArrayItem(parser, 1);
 	cJSON_ArrayForEach(iterator, synonym) {
+		syn_tmp = iterator->child->valuestring;
+		syn_tmp[0] = toupper(syn_tmp[0]);
 		string_append(&syn_str, "\n\n\033[1m\033[37m[%s]:\033[0m",
-				iterator->child->valuestring);
+				syn_tmp);
 
 		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
 			string_append(&syn_str, "\n  \033[1m\033[37m%s:\033[0m\n",
 					syn_val1->child->valuestring);
 			string_append(&syn_str, "\t");
-			cJSON_ArrayForEach(syn_val2, cJSON_GetArrayItem(syn_val1, 1)) {
-				string_append(&syn_str, "%s, ", syn_val2->valuestring);
+			cJSON_ArrayForEach(syn_val2,
+					cJSON_GetArrayItem(syn_val1, 1)) {
+				string_append(&syn_str, "%s, ",
+						syn_val2->valuestring);
+
 			}
 			syn_str[strlen(syn_str)-2] = '.';
 		}
@@ -259,10 +195,11 @@ full_mode(void)
 	/* get examples */
 	int max = 5;
 	example = cJSON_GetArrayItem(parser, 13);
-
+	if (!(example_str = STRING_NEW()))
+		goto cleanup;
 	if (!cJSON_IsNull(example)) {
-		if (!(example_str = STRING_NEW()))
-			goto cleanup;
+		string_append(&example_str, "\n\n%s\n",
+				"------------------------------------");
 		cJSON_ArrayForEach(iterator, example ) {
 			cJSON_ArrayForEach(example_val, iterator) {
 				if (max == 0)
@@ -279,25 +216,20 @@ full_mode(void)
 	/* experimental */
 	if (strlen(trans_src) < 1)
 		goto cleanup;
-
-	string_append(&result, "\"%s\"%s\n\n%s\n[%s]",
+	string_append(&result, "%s", correct_str);
+	string_append(&result, "\"%s\"%s\n\n%s\n[%s]\n",
 			trans_src, lang_str, trans_dest, lang.dest);
-	if (spell_str)
-		string_append(&result, "\n\n%s\n", spell_str);
+	string_append(&result, "%s", spell_str);
 	string_append(&result, "%s", syn_str);
-	if (example_str) {
-		string_append(&result, "\n\n%s\n",
-				"------------------------------");
-		string_append(&result, "%s", example_str);
-	}
+	string_append(&result, "%s", example_str);
 
 	/* print to stdout */
-	fprintf(stdout, "%s\n", result);
+	fprintf(stdout, "%s", result);
 
 cleanup:
 	cJSON_Delete(parser);
-	if (dest)
-		free(dest);
+	if (req_str)
+		free(req_str);
 	if (trans_src)
 		free(trans_src);
 	if (trans_dest)
@@ -308,6 +240,8 @@ cleanup:
 		free(lang_str);
 	if (syn_str)
 		free(syn_str);
+	if (correct_str)
+		free(correct_str);
 	if (example_str)
 		free(example_str);
 	if (result)
@@ -390,6 +324,75 @@ cleanup:
 	if (mem.memory)
 		return mem.memory;
 	return NULL;
+}
+
+static inline char *
+html_cleaner(char **dest)
+{
+	char *p		= (*dest);
+	char *tmp	= NULL;
+	int i		= 0;
+	
+	if (!(tmp = calloc(sizeof(char), strlen(*dest)+1)))
+		return (*dest);
+
+	/* UNSAFE
+	 * can caused segfault
+	 */
+	while (*p) {
+		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>')
+			p += 3;
+		else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
+			       	*(p+3) == '>')
+			p += 4;
+		tmp[i] = (*p);
+		i++;
+		p++;
+	}
+	free(*dest);
+	(*dest) = tmp;
+
+	return (*dest);
+}
+
+static inline char *
+string_append(char **dest, const char *fmt, ...)
+{
+	char *tmp_p	= NULL;
+	char *tmp_dest	= NULL;
+	int n		= 0;
+	size_t size	= 0;
+	va_list vargs;
+
+	/* determine required size */
+	va_start(vargs, fmt);
+	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
+
+	if (n < 0)
+		goto cleanup;
+
+	size = (size_t)n +1; /* one extra byte for '\0' */
+	if (!(tmp_p = malloc(size)))
+		goto cleanup;
+
+	va_start(vargs, fmt);
+	n = vsnprintf(tmp_p, size, fmt, vargs);
+	va_end(vargs);
+
+	if (n < 0)
+		goto cleanup;
+
+	if (!(tmp_dest = realloc((*dest), (strlen((*dest)) + size))))
+		goto cleanup;
+
+	(*dest) = tmp_dest;
+	strncat((*dest), tmp_p, size -1);
+
+cleanup:
+	if (tmp_p)
+		free(tmp_p);
+	return (*dest);
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
