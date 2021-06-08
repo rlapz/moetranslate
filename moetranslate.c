@@ -16,8 +16,20 @@
 
 /* macros */
 #define STRING_NEW() (calloc(sizeof(char), sizeof(char)))
+#define LENGTH(X) (sizeof(X) / sizeof(X[0]))
+
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
+
+enum {
+	AF=0, SQ, AM, AR, HY, AZ, EU, BE, BN, BS, BG, CA, CEB, ZHCN, ZHTW, CO,
+	HR, CS, DA, NL, EN, EO, ET, FI, FR, FY, GL, KA, DE, EL, GU, HT, HA,
+       	HAW, HE, HI, HMN, HU, IS, IG, ID, GA, IT, JA, JV, KN, KK, KM, RW, KO,
+	KU, KY, LO, LA, LV, LT, LB, MK, MG, MS, ML, MI, MT, MR, MN, MY, NE, NO,
+       	NY, OR, PS, FA, PL, PT, PA, RO, RU, SM, GD, SR, ST, SN, SD, SI, SK, SL,
+       	SO, ES, SU, SW, SV, TL, TG, TA, TT, TE, TH, TR, TK, UK, UR, UG, UZ, VI,
+       	CY, XH, YI, YO, ZU
+};
 
 struct Lang {
 	int	mode;	/* mode translation */
@@ -32,12 +44,13 @@ struct Memory {
 };
 
 /* function declaration */
+static char *get_lang(const char *lcode);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
 static char *request_handler(void);
-static inline char *html_cleaner(char **dest);
-static inline char *string_append(char **dest, const char *fmt, ...);
+static char *html_cleaner(char **dest);
+static char *string_append(char **dest, const char *fmt, ...);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
@@ -50,7 +63,133 @@ static const char *url_params[]	= {
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
+/* 19 109 */
+static const char *lang_code[109][17] = {
+	[AF] = {"af", "Afrikaans"},
+	[SQ] = {"sq", "Albanian"},
+	[AM] = {"am", "Amharic"},
+	[AR] = {"ar", "Arabic"},
+	[HY] = {"hy", "Armenian"},
+	[AZ] = {"az", "Azerbaijani"},
+	[EU] = {"eu", "Basque"},
+	[BE] = {"be", "Belarusian"},
+	[BN] = {"bn", "Bengali"},
+	[BS] = {"bs", "Bosnian"},
+	[BG] = {"bg", "Bulgarian"},
+	[CA] = {"ca", "Catalan"},
+	[CEB] = {"ceb", "Cebuano"},
+	[ZHCN] = {"zh-CN", "Chinese Simplified"},
+	[ZHTW] = {"zh-TW", "Chinese Traditional"},
+	[CO] = {"co", "Corsican"},
+	[HR] = {"hr", "Croatian"},
+	[CS] = {"cs", "Czech"},
+	[DA] = {"da", "Danish"},
+	[NL] = {"nl", "Dutch"},
+	[EN] = {"en", "English"},
+	[EO] = {"eo", "Esperanto"},
+	[ET] = {"et", "Estonian"},
+	[FI] = {"fi", "Finnish"},
+	[FR] = {"fr", "French"},
+	[FY] = {"fy", "Frisian"},
+	[GL] = {"gl", "Galician"},
+	[KA] = {"ka", "Georgian"},
+	[DE] = {"de", "German"},
+	[EL] = {"el", "Greek"},
+	[GU] = {"gu", "Gujarati"},
+	[HT] = {"ht", "Haitian Crole"},
+	[HA] = {"ha", "Hausan"},
+	[HAW] = {"haw", "Hawaiian"},
+	[HE] = {"he", "Hebrew"},
+	[HI] = {"hi", "Hindi"},
+	[HMN] = {"hmn", "Hmong"},
+	[HU] = {"hu", "Hungarian"},
+	[IS] = {"is", "Icelandic"},
+	[IG] = {"ig", "Igbo"},
+	[ID] = {"id", "Indonesian"},
+	[GA] = {"ga", "Irish"},
+	[IT] = {"it", "Italian"},
+	[JA] = {"ja", "Japanese"},
+	[JV] = {"jv", "Javanese"},
+	[KN] = {"kn", "Kannada"},
+	[KK] = {"kk", "Kazakh"},
+	[KM] = {"km", "Khmer"},
+	[RW] = {"rw", "Kinyarwanda"},
+	[KO] = {"ko", "Korean"},
+	[KU] = {"ku", "Kurdish"},
+	[KY] = {"ky", "Kyrgyz"},
+	[LO] = {"lo", "Lao"},
+	[LA] = {"la", "Latin"},
+	[LV] = {"la", "Latvian"},
+	[LT] = {"lt", "Lithunian"},
+	[LB] = {"lb", "Luxembourgish"},
+	[MK] = {"mk", "Macedonian"},
+	[MG] = {"mg", "Malagasy"},
+	[MS] = {"ms", "Malay"},
+	[ML] = {"ml", "Malayam"},
+	[MT] = {"mt", "Maltese"},
+	[MI] = {"mi", "Maori"},
+	[MR] = {"mr", "Marathi"},
+	[MN] = {"mn", "Mongolian"},
+	[MY] = {"my", "Myanmar"},
+	[NE] = {"ne", "Nepali"},
+	[NO] = {"no", "Norwebian"},
+	[NY] = {"ny", "Nyanja"},
+	[OR] = {"or", "Odia"},
+	[PS] = {"ps", "Pashto"},
+	[FA] = {"fa", "Persian"},
+	[PL] = {"pl", "Polish"},
+	[PT] = {"pt", "Portuguese"},
+	[PA] = {"pa", "Punjabi"},
+	[RO] = {"ro", "Romanian"},
+	[RU] = {"ru", "Russian"},
+	[SM] = {"sm", "Samoan"},
+	[GD] = {"gd", "Scots Gaelic"},
+	[SR] = {"sr", "Serbian"},
+	[ST] = {"st", "Sesotho"},
+	[SN] = {"sn", "Shona"},
+	[SD] = {"sd", "Sindhi"},
+	[SI] = {"si", "Sinhala"},
+	[SK] = {"sk", "Slovak"},
+	[SL] = {"sl", "Slovenian"},
+	[SO] = {"so", "Somali"},
+	[ES] = {"es", "Spanish"},
+	[SU] = {"su", "Sundanese"},
+	[SW] = {"sw", "Swahili"},
+	[SV] = {"sv", "Swedish"},
+	[TL] = {"tl", "Tagalog"},
+	[TG] = {"tg", "Tajik"},
+	[TA] = {"ta", "Tamil"},
+	[TT] = {"tt", "Tatar"},
+	[TE] = {"te", "Telugu"},
+	[TH] = {"th", "Thai"},
+	[TR] = {"tr", "Turkish"},
+	[TK] = {"tk", "Turkmen"},
+	[UK] = {"uk", "Ukranian"},
+	[UR] = {"ur", "Urdu"},
+	[UG] = {"ug", "Uyghur"},
+	[UZ] = {"uz", "Uzbek"},
+	[VI] = {"vi", "Vietnamese"},
+	[CY] = {"cy", "Welsh"},
+	[XH] = {"xh", "Xhosa"},
+	[YI] = {"yi", "Yiddish"},
+	[YO] = {"yo", "Yaruba"},
+	[ZU] = {"zu", "Zulu"},
+};
+
 /* function implementations */
+static char *
+get_lang(const char *lcode)
+{
+	size_t i = 0;
+	size_t len = strlen(lcode);
+	for (; i < LENGTH(lang_code); i++) {
+		if (strncmp(lcode, lang_code[i][0], len) == 0)
+			return (char*)lang_code[i][1];
+	}
+
+	return NULL;
+}
+
 static void
 brief_mode(void)
 {
@@ -163,10 +302,15 @@ full_mode(void)
 
 	/* get language */
 	langdest = cJSON_GetArrayItem(parser, 2);
+	char *lang_v = NULL;
 	if (!(lang_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(langdest)) {
-		string_append(&lang_str, "\n[%s]", langdest->valuestring);
+		lang_v = get_lang(langdest->valuestring);
+		string_append(&lang_str, "\n[%s]: %s",
+				langdest->valuestring,
+				lang_v ? lang_v : ""
+				);
 	}
 
 	/* get synonyms */
@@ -195,7 +339,7 @@ full_mode(void)
 	}
 
 	/* get examples */
-	int max = 5;
+	int max = 5; /* examples max */
 	example = cJSON_GetArrayItem(parser, 13);
 	if (!(example_str = STRING_NEW()))
 		goto cleanup;
@@ -219,8 +363,9 @@ full_mode(void)
 	if (strlen(trans_src) < 1)
 		goto cleanup;
 	string_append(&result, "%s", correct_str);
-	string_append(&result, "\"%s\"%s\n\n%s\n[%s]\n",
-			trans_src, lang_str, trans_dest, lang.dest);
+	string_append(&result, "\"%s\"%s\n\n%s\n[%s]: %s\n",
+			trans_src, lang_str, trans_dest,
+			lang.dest, get_lang(lang.dest));
 	string_append(&result, "%s", spell_str);
 	string_append(&result, "%s", syn_str);
 	string_append(&result, "%s", example_str);
@@ -328,7 +473,7 @@ cleanup:
 	return NULL;
 }
 
-static inline char *
+static char *
 html_cleaner(char **dest)
 {
 	char *p		= (*dest);
@@ -357,7 +502,7 @@ html_cleaner(char **dest)
 	return (*dest);
 }
 
-static inline char *
+static char *
 string_append(char **dest, const char *fmt, ...)
 {
 	char *tmp_p	= NULL;
@@ -439,6 +584,17 @@ main(int argc, char *argv[])
 	lang.src = argv[1];
 	lang.dest = argv[2];
 	lang.mode = BRIEF;
+
+	if (strncmp(lang.src, "auto", 5) != 0) {
+		if (!get_lang(lang.src)) {
+			fprintf(stderr, "Unknown \"%s\" language code\n", lang.src);
+			return EXIT_FAILURE;
+		}
+	}
+	if (!get_lang(lang.dest)) {
+		fprintf(stderr, "Unknown \"%s\" language code\n", lang.dest);
+		return EXIT_FAILURE;
+	}
 
 	if (strcmp(argv[3], "-b") == 0) {
 		if (argv[4] == NULL || strlen(argv[4]) == 0) {
