@@ -16,6 +16,8 @@
 
 /* macros */
 #define STRING_NEW() (calloc(sizeof(char), sizeof(char)))
+#define LENGTH(X) (sizeof(X) / sizeof(X[0]))
+
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
@@ -24,7 +26,7 @@ struct Lang {
 	char	*src;	/* source language */
 	char	*dest;	/* target language */
 	char	*text;	/* text/words */
-} __attribute__((__packed__));
+};
 
 struct Memory {
 	char	*memory;
@@ -32,12 +34,13 @@ struct Memory {
 };
 
 /* function declaration */
+static char *get_lang(const char *lcode);
 static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
 static char *request_handler(void);
-static inline char *html_cleaner(char **dest);
-static inline char *string_append(char **dest, const char *fmt, ...);
+static char *html_cleaner(char **dest);
+static char *string_append(char **dest, const char *fmt, ...);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* global variables */
@@ -50,7 +53,60 @@ static const char *url_params[]	= {
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
+/* 17 109 */
+static const char *lang_code[109][17] = {
+	{"af", "Afrikaans"},	{"sq", "Albanian"},	{"am", "Amharic"},
+	{"ar", "Arabic"},	{"hy", "Armenian"},	{"az", "Azerbaijani"},
+	{"eu", "Basque"},	{"be", "Belarusian"},	{"bn", "Bengali"},
+	{"bs", "Bosnian"},	{"bg", "Bulgarian"},	{"ca", "Catalan"},
+	{"ceb", "Cebuano"},	{"zh-CN", "Chinese Simplified"}, {"zh-TW", "Chinese Traditional"},
+	{"co", "Corsican"},	{"hr", "Croatian"},	{"cs", "Czech"},
+	{"da", "Danish"},	{"nl", "Dutch"},	{"en", "English"},
+	{"eo", "Esperanto"},	{"et", "Estonian"},	{"fi", "Finnish"},
+	{"fr", "French"},	{"fy", "Frisian"},	{"gl", "Galician"},
+	{"ka", "Georgian"},	{"de", "German"},	{"el", "Greek"},
+	{"gu", "Gujarati"},	{"ht", "Haitian Crole"}, {"ha", "Hausan"},
+	{"haw", "Hawaiian"},	{"he", "Hebrew"},	{"hi", "Hindi"},
+	{"hmn", "Hmong"},	{"hu", "Hungarian"},	{"is", "Icelandic"},
+	{"ig", "Igbo"},		{"id", "Indonesian"},	{"ga", "Irish"},
+	{"it", "Italian"},	{"ja", "Japanese"},	{"jv", "Javanese"},
+	{"kn", "Kannada"},	{"kk", "Kazakh"},	{"km", "Khmer"},
+	{"rw", "Kinyarwanda"},	{"ko", "Korean"},	{"ku", "Kurdish"},
+	{"ky", "Kyrgyz"},	{"lo", "Lao"},		{"la", "Latin"},
+	{"la", "Latvian"},	{"lt", "Lithunian"},	{"lb", "Luxembourgish"},
+	{"mk", "Macedonian"},	{"mg", "Malagasy"},	{"ms", "Malay"},
+	{"ml", "Malayam"},	{"mt", "Maltese"},	{"mi", "Maori"},
+	{"mr", "Marathi"},	{"mn", "Mongolian"},	{"my", "Myanmar"},
+	{"ne", "Nepali"},	{"no", "Norwebian"},	{"ny", "Nyanja"},
+	{"or", "Odia"},		{"ps", "Pashto"},	{"fa", "Persian"},
+	{"pl", "Polish"},	{"pt", "Portuguese"},	{"pa", "Punjabi"},
+	{"ro", "Romanian"},	{"ru", "Russian"},	{"sm", "Samoan"},
+	{"gd", "Scots Gaelic"},	{"sr", "Serbian"},	{"st", "Sesotho"},
+	{"sn", "Shona"},	{"sd", "Sindhi"},	{"si", "Sinhala"},
+	{"sk", "Slovak"},	{"sl", "Slovenian"},	{"so", "Somali"},
+	{"es", "Spanish"},	{"su", "Sundanese"},	{"sw", "Swahili"},
+	{"sv", "Swedish"},	{"tl", "Tagalog"},	{"tg", "Tajik"},
+	{"ta", "Tamil"},	{"tt", "Tatar"},	{"te", "Telugu"},
+	{"th", "Thai"},		{"tr", "Turkish"},	{"tk", "Turkmen"},
+	{"uk", "Ukranian"},	{"ur", "Urdu"},		{"ug", "Uyghur"},
+	{"uz", "Uzbek"},	{"vi", "Vietnamese"},	{"cy", "Welsh"},
+	{"xh", "Xhosa"},	{"yi", "Yiddish"},	{"yo", "Yaruba"},
+	{"zu", "Zulu"},
+};
+
 /* function implementations */
+static char *
+get_lang(const char *lcode)
+{
+	size_t lcode_len = strlen(lcode);
+	for (size_t i = 0; i < LENGTH(lang_code); i++) {
+		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
+			return (char*)lang_code[i][1];
+	}
+
+	return NULL;
+}
+
 static void
 brief_mode(void)
 {
@@ -84,7 +140,6 @@ static void
 full_mode(void)
 {
 	char *req_str		= NULL;
-	char *result		= NULL;
 	char *trans_src		= NULL;
 	char *trans_dest	= NULL;
 	char *spell_str		= NULL;
@@ -109,9 +164,6 @@ full_mode(void)
 		perror("full_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
-
-	if (!(result = STRING_NEW()))
-		goto cleanup;
 
 	/* cJSON Parser */
 	/* get translation */
@@ -155,16 +207,24 @@ full_mode(void)
 	if (!(correct_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(correct->child)) {
+		free(trans_src);
+		if (!(trans_src = STRING_NEW()))
+			goto cleanup;
 		string_append(&correct_str, "\nDid you mean: \"%s\"\n",
 				correct->child->next->valuestring);
+		string_append(&trans_src, correct->child->next->valuestring);
 	}
 
 	/* get language */
 	langdest = cJSON_GetArrayItem(parser, 2);
+	char *lang_v = NULL;
 	if (!(lang_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(langdest)) {
-		string_append(&lang_str, "\n[%s]", langdest->valuestring);
+		lang_v = get_lang(langdest->valuestring);
+		string_append(&lang_str, "\n[%s]: %s",
+				langdest->valuestring,
+				lang_v ? lang_v : "");
 	}
 
 	/* get synonyms */
@@ -193,7 +253,7 @@ full_mode(void)
 	}
 
 	/* get examples */
-	int max = 5;
+	int max = 5; /* examples max */
 	example = cJSON_GetArrayItem(parser, 13);
 	if (!(example_str = STRING_NEW()))
 		goto cleanup;
@@ -212,19 +272,17 @@ full_mode(void)
 		html_cleaner(&example_str);
 	}
 	
-
+	/* output */
 	/* experimental */
-	if (strlen(trans_src) < 1)
+	if (strlen(trans_src) == 0)
 		goto cleanup;
-	string_append(&result, "%s", correct_str);
-	string_append(&result, "\"%s\"%s\n\n%s\n[%s]\n",
-			trans_src, lang_str, trans_dest, lang.dest);
-	string_append(&result, "%s", spell_str);
-	string_append(&result, "%s", syn_str);
-	string_append(&result, "%s", example_str);
 
 	/* print to stdout */
-	fprintf(stdout, "%s", result);
+	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s\n%s",
+			correct_str,
+			trans_src, lang_str, trans_dest,
+			lang.dest, get_lang(lang.dest),
+			spell_str, syn_str, example_str);
 
 cleanup:
 	cJSON_Delete(parser);
@@ -244,8 +302,6 @@ cleanup:
 		free(correct_str);
 	if (example_str)
 		free(example_str);
-	if (result)
-		free(result);
 }
 
 static char *
@@ -326,7 +382,7 @@ cleanup:
 	return NULL;
 }
 
-static inline char *
+static char *
 html_cleaner(char **dest)
 {
 	char *p		= (*dest);
@@ -355,7 +411,7 @@ html_cleaner(char **dest)
 	return (*dest);
 }
 
-static inline char *
+static char *
 string_append(char **dest, const char *fmt, ...)
 {
 	char *tmp_p	= NULL;
@@ -437,6 +493,17 @@ main(int argc, char *argv[])
 	lang.src = argv[1];
 	lang.dest = argv[2];
 	lang.mode = BRIEF;
+
+	if (strncmp(lang.src, "auto", 5) != 0) {
+		if (!get_lang(lang.src)) {
+			fprintf(stderr, "Unknown \"%s\" language code\n", lang.src);
+			return EXIT_FAILURE;
+		}
+	}
+	if (!get_lang(lang.dest)) {
+		fprintf(stderr, "Unknown \"%s\" language code\n", lang.dest);
+		return EXIT_FAILURE;
+	}
 
 	if (strcmp(argv[3], "-b") == 0) {
 		if (argv[4] == NULL || strlen(argv[4]) == 0) {
