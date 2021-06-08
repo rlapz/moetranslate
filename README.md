@@ -4,17 +4,22 @@ Simple language translator written in C
 ## Currently Supported:
 1. Google Translate API
 
-## How to Compile:
+## How to Install:
 
 ```
-chmod +x compile.sh
-./compile.sh
+make && sudo make install
+```
+
+## How to Uninstall:
+
+```
+sudo make uninstall
 ```
 
 ## How to Use:
 
 ```
-./moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
+moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
 
 [-b] (optional) means "Brief Mode" (only show simple output)
 ```
@@ -38,5 +43,4 @@ https://cloud.google.com/translate/docs/languages
 
 
 ## TODO:
-1. Parse Full mode
-2. Add Yandex Translate API
+1. Add Yandex Translate API
