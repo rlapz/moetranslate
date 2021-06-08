@@ -21,22 +21,12 @@
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
-enum {
-	AF=0, SQ, AM, AR, HY, AZ, EU, BE, BN, BS, BG, CA, CEB, ZHCN, ZHTW, CO,
-	HR, CS, DA, NL, EN, EO, ET, FI, FR, FY, GL, KA, DE, EL, GU, HT, HA,
-       	HAW, HE, HI, HMN, HU, IS, IG, ID, GA, IT, JA, JV, KN, KK, KM, RW, KO,
-	KU, KY, LO, LA, LV, LT, LB, MK, MG, MS, ML, MI, MT, MR, MN, MY, NE, NO,
-       	NY, OR, PS, FA, PL, PT, PA, RO, RU, SM, GD, SR, ST, SN, SD, SI, SK, SL,
-       	SO, ES, SU, SW, SV, TL, TG, TA, TT, TE, TH, TR, TK, UK, UR, UG, UZ, VI,
-       	CY, XH, YI, YO, ZU
-};
-
 struct Lang {
 	int	mode;	/* mode translation */
 	char	*src;	/* source language */
 	char	*dest;	/* target language */
 	char	*text;	/* text/words */
-} __attribute__((__packed__));
+};
 
 struct Memory {
 	char	*memory;
@@ -63,127 +53,54 @@ static const char *url_params[]	= {
 		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=id&q=%s"
 };
 
-/* 19 109 */
+/* 17 109 */
 static const char *lang_code[109][17] = {
-	[AF] = {"af", "Afrikaans"},
-	[SQ] = {"sq", "Albanian"},
-	[AM] = {"am", "Amharic"},
-	[AR] = {"ar", "Arabic"},
-	[HY] = {"hy", "Armenian"},
-	[AZ] = {"az", "Azerbaijani"},
-	[EU] = {"eu", "Basque"},
-	[BE] = {"be", "Belarusian"},
-	[BN] = {"bn", "Bengali"},
-	[BS] = {"bs", "Bosnian"},
-	[BG] = {"bg", "Bulgarian"},
-	[CA] = {"ca", "Catalan"},
-	[CEB] = {"ceb", "Cebuano"},
-	[ZHCN] = {"zh-CN", "Chinese Simplified"},
-	[ZHTW] = {"zh-TW", "Chinese Traditional"},
-	[CO] = {"co", "Corsican"},
-	[HR] = {"hr", "Croatian"},
-	[CS] = {"cs", "Czech"},
-	[DA] = {"da", "Danish"},
-	[NL] = {"nl", "Dutch"},
-	[EN] = {"en", "English"},
-	[EO] = {"eo", "Esperanto"},
-	[ET] = {"et", "Estonian"},
-	[FI] = {"fi", "Finnish"},
-	[FR] = {"fr", "French"},
-	[FY] = {"fy", "Frisian"},
-	[GL] = {"gl", "Galician"},
-	[KA] = {"ka", "Georgian"},
-	[DE] = {"de", "German"},
-	[EL] = {"el", "Greek"},
-	[GU] = {"gu", "Gujarati"},
-	[HT] = {"ht", "Haitian Crole"},
-	[HA] = {"ha", "Hausan"},
-	[HAW] = {"haw", "Hawaiian"},
-	[HE] = {"he", "Hebrew"},
-	[HI] = {"hi", "Hindi"},
-	[HMN] = {"hmn", "Hmong"},
-	[HU] = {"hu", "Hungarian"},
-	[IS] = {"is", "Icelandic"},
-	[IG] = {"ig", "Igbo"},
-	[ID] = {"id", "Indonesian"},
-	[GA] = {"ga", "Irish"},
-	[IT] = {"it", "Italian"},
-	[JA] = {"ja", "Japanese"},
-	[JV] = {"jv", "Javanese"},
-	[KN] = {"kn", "Kannada"},
-	[KK] = {"kk", "Kazakh"},
-	[KM] = {"km", "Khmer"},
-	[RW] = {"rw", "Kinyarwanda"},
-	[KO] = {"ko", "Korean"},
-	[KU] = {"ku", "Kurdish"},
-	[KY] = {"ky", "Kyrgyz"},
-	[LO] = {"lo", "Lao"},
-	[LA] = {"la", "Latin"},
-	[LV] = {"la", "Latvian"},
-	[LT] = {"lt", "Lithunian"},
-	[LB] = {"lb", "Luxembourgish"},
-	[MK] = {"mk", "Macedonian"},
-	[MG] = {"mg", "Malagasy"},
-	[MS] = {"ms", "Malay"},
-	[ML] = {"ml", "Malayam"},
-	[MT] = {"mt", "Maltese"},
-	[MI] = {"mi", "Maori"},
-	[MR] = {"mr", "Marathi"},
-	[MN] = {"mn", "Mongolian"},
-	[MY] = {"my", "Myanmar"},
-	[NE] = {"ne", "Nepali"},
-	[NO] = {"no", "Norwebian"},
-	[NY] = {"ny", "Nyanja"},
-	[OR] = {"or", "Odia"},
-	[PS] = {"ps", "Pashto"},
-	[FA] = {"fa", "Persian"},
-	[PL] = {"pl", "Polish"},
-	[PT] = {"pt", "Portuguese"},
-	[PA] = {"pa", "Punjabi"},
-	[RO] = {"ro", "Romanian"},
-	[RU] = {"ru", "Russian"},
-	[SM] = {"sm", "Samoan"},
-	[GD] = {"gd", "Scots Gaelic"},
-	[SR] = {"sr", "Serbian"},
-	[ST] = {"st", "Sesotho"},
-	[SN] = {"sn", "Shona"},
-	[SD] = {"sd", "Sindhi"},
-	[SI] = {"si", "Sinhala"},
-	[SK] = {"sk", "Slovak"},
-	[SL] = {"sl", "Slovenian"},
-	[SO] = {"so", "Somali"},
-	[ES] = {"es", "Spanish"},
-	[SU] = {"su", "Sundanese"},
-	[SW] = {"sw", "Swahili"},
-	[SV] = {"sv", "Swedish"},
-	[TL] = {"tl", "Tagalog"},
-	[TG] = {"tg", "Tajik"},
-	[TA] = {"ta", "Tamil"},
-	[TT] = {"tt", "Tatar"},
-	[TE] = {"te", "Telugu"},
-	[TH] = {"th", "Thai"},
-	[TR] = {"tr", "Turkish"},
-	[TK] = {"tk", "Turkmen"},
-	[UK] = {"uk", "Ukranian"},
-	[UR] = {"ur", "Urdu"},
-	[UG] = {"ug", "Uyghur"},
-	[UZ] = {"uz", "Uzbek"},
-	[VI] = {"vi", "Vietnamese"},
-	[CY] = {"cy", "Welsh"},
-	[XH] = {"xh", "Xhosa"},
-	[YI] = {"yi", "Yiddish"},
-	[YO] = {"yo", "Yaruba"},
-	[ZU] = {"zu", "Zulu"},
+	{"af", "Afrikaans"},	{"sq", "Albanian"},	{"am", "Amharic"},
+	{"ar", "Arabic"},	{"hy", "Armenian"},	{"az", "Azerbaijani"},
+	{"eu", "Basque"},	{"be", "Belarusian"},	{"bn", "Bengali"},
+	{"bs", "Bosnian"},	{"bg", "Bulgarian"},	{"ca", "Catalan"},
+	{"ceb", "Cebuano"},	{"zh-CN", "Chinese Simplified"}, {"zh-TW", "Chinese Traditional"},
+	{"co", "Corsican"},	{"hr", "Croatian"},	{"cs", "Czech"},
+	{"da", "Danish"},	{"nl", "Dutch"},	{"en", "English"},
+	{"eo", "Esperanto"},	{"et", "Estonian"},	{"fi", "Finnish"},
+	{"fr", "French"},	{"fy", "Frisian"},	{"gl", "Galician"},
+	{"ka", "Georgian"},	{"de", "German"},	{"el", "Greek"},
+	{"gu", "Gujarati"},	{"ht", "Haitian Crole"}, {"ha", "Hausan"},
+	{"haw", "Hawaiian"},	{"he", "Hebrew"},	{"hi", "Hindi"},
+	{"hmn", "Hmong"},	{"hu", "Hungarian"},	{"is", "Icelandic"},
+	{"ig", "Igbo"},		{"id", "Indonesian"},	{"ga", "Irish"},
+	{"it", "Italian"},	{"ja", "Japanese"},	{"jv", "Javanese"},
+	{"kn", "Kannada"},	{"kk", "Kazakh"},	{"km", "Khmer"},
+	{"rw", "Kinyarwanda"},	{"ko", "Korean"},	{"ku", "Kurdish"},
+	{"ky", "Kyrgyz"},	{"lo", "Lao"},		{"la", "Latin"},
+	{"la", "Latvian"},	{"lt", "Lithunian"},	{"lb", "Luxembourgish"},
+	{"mk", "Macedonian"},	{"mg", "Malagasy"},	{"ms", "Malay"},
+	{"ml", "Malayam"},	{"mt", "Maltese"},	{"mi", "Maori"},
+	{"mr", "Marathi"},	{"mn", "Mongolian"},	{"my", "Myanmar"},
+	{"ne", "Nepali"},	{"no", "Norwebian"},	{"ny", "Nyanja"},
+	{"or", "Odia"},		{"ps", "Pashto"},	{"fa", "Persian"},
+	{"pl", "Polish"},	{"pt", "Portuguese"},	{"pa", "Punjabi"},
+	{"ro", "Romanian"},	{"ru", "Russian"},	{"sm", "Samoan"},
+	{"gd", "Scots Gaelic"},	{"sr", "Serbian"},	{"st", "Sesotho"},
+	{"sn", "Shona"},	{"sd", "Sindhi"},	{"si", "Sinhala"},
+	{"sk", "Slovak"},	{"sl", "Slovenian"},	{"so", "Somali"},
+	{"es", "Spanish"},	{"su", "Sundanese"},	{"sw", "Swahili"},
+	{"sv", "Swedish"},	{"tl", "Tagalog"},	{"tg", "Tajik"},
+	{"ta", "Tamil"},	{"tt", "Tatar"},	{"te", "Telugu"},
+	{"th", "Thai"},		{"tr", "Turkish"},	{"tk", "Turkmen"},
+	{"uk", "Ukranian"},	{"ur", "Urdu"},		{"ug", "Uyghur"},
+	{"uz", "Uzbek"},	{"vi", "Vietnamese"},	{"cy", "Welsh"},
+	{"xh", "Xhosa"},	{"yi", "Yiddish"},	{"yo", "Yaruba"},
+	{"zu", "Zulu"},
 };
 
 /* function implementations */
 static char *
 get_lang(const char *lcode)
 {
-	size_t i = 0;
-	size_t len = strlen(lcode);
-	for (; i < LENGTH(lang_code); i++) {
-		if (strncmp(lcode, lang_code[i][0], len) == 0)
+	size_t lcode_len = strlen(lcode);
+	for (size_t i = 0; i < LENGTH(lang_code); i++) {
+		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
 			return (char*)lang_code[i][1];
 	}
 
@@ -223,7 +140,6 @@ static void
 full_mode(void)
 {
 	char *req_str		= NULL;
-	/* char *result		= NULL; */
 	char *trans_src		= NULL;
 	char *trans_dest	= NULL;
 	char *spell_str		= NULL;
@@ -361,41 +277,12 @@ full_mode(void)
 	if (strlen(trans_src) == 0)
 		goto cleanup;
 
+	/* print to stdout */
 	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s\n%s",
 			correct_str,
 			trans_src, lang_str, trans_dest,
 			lang.dest, get_lang(lang.dest),
 			spell_str, syn_str, example_str);
-
-	/*
-	fprintf(stdout, "%s", correct_str);
-	fprintf(stdout, "\"%s\"%s\n\n%s\n[%s]: %s\n",
-			trans_src, lang_str, trans_dest,
-			lang.dest, get_lang(lang.dest));
-	fprintf(stdout, "%s", spell_str);
-	fprintf(stdout, "%s\n", syn_str);
-	fprintf(stdout, "%s", example_str);
-	*/
-
-	/*
-	if (!(result = STRING_NEW()))
-		goto cleanup;
-		*/
-
-	/*
-	string_append(&result, "%s", correct_str);
-	string_append(&result, "\"%s\"%s\n\n%s\n[%s]: %s\n",
-			trans_src, lang_str, trans_dest,
-			lang.dest, get_lang(lang.dest));
-	string_append(&result, "%s", spell_str);
-	string_append(&result, "%s\n", syn_str);
-	string_append(&result, "%s", example_str);
-	*/
-
-	/* print to stdout */
-	/*
-	fprintf(stdout, "%s", result);
-	*/
 
 cleanup:
 	cJSON_Delete(parser);
@@ -415,10 +302,6 @@ cleanup:
 		free(correct_str);
 	if (example_str)
 		free(example_str);
-	/*
-	if (result)
-		free(result);
-		*/
 }
 
 static char *
