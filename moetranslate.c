@@ -223,7 +223,7 @@ static void
 full_mode(void)
 {
 	char *req_str		= NULL;
-	char *result		= NULL;
+	/* char *result		= NULL; */
 	char *trans_src		= NULL;
 	char *trans_dest	= NULL;
 	char *spell_str		= NULL;
@@ -248,9 +248,6 @@ full_mode(void)
 		perror("full_mode(): cJSON_Parse()");
 		goto cleanup;
 	}
-
-	if (!(result = STRING_NEW()))
-		goto cleanup;
 
 	/* cJSON Parser */
 	/* get translation */
@@ -359,10 +356,33 @@ full_mode(void)
 		html_cleaner(&example_str);
 	}
 	
-
+	/* output */
 	/* experimental */
-	if (strlen(trans_src) < 1)
+	if (strlen(trans_src) == 0)
 		goto cleanup;
+
+	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s\n%s",
+			correct_str,
+			trans_src, lang_str, trans_dest,
+			lang.dest, get_lang(lang.dest),
+			spell_str, syn_str, example_str);
+
+	/*
+	fprintf(stdout, "%s", correct_str);
+	fprintf(stdout, "\"%s\"%s\n\n%s\n[%s]: %s\n",
+			trans_src, lang_str, trans_dest,
+			lang.dest, get_lang(lang.dest));
+	fprintf(stdout, "%s", spell_str);
+	fprintf(stdout, "%s\n", syn_str);
+	fprintf(stdout, "%s", example_str);
+	*/
+
+	/*
+	if (!(result = STRING_NEW()))
+		goto cleanup;
+		*/
+
+	/*
 	string_append(&result, "%s", correct_str);
 	string_append(&result, "\"%s\"%s\n\n%s\n[%s]: %s\n",
 			trans_src, lang_str, trans_dest,
@@ -370,9 +390,12 @@ full_mode(void)
 	string_append(&result, "%s", spell_str);
 	string_append(&result, "%s\n", syn_str);
 	string_append(&result, "%s", example_str);
+	*/
 
 	/* print to stdout */
+	/*
 	fprintf(stdout, "%s", result);
+	*/
 
 cleanup:
 	cJSON_Delete(parser);
@@ -392,8 +415,10 @@ cleanup:
 		free(correct_str);
 	if (example_str)
 		free(example_str);
+	/*
 	if (result)
 		free(result);
+		*/
 }
 
 static char *
