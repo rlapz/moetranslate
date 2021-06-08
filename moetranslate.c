@@ -294,9 +294,11 @@ full_mode(void)
 	if (!(correct_str = STRING_NEW()))
 		goto cleanup;
 	if (cJSON_IsString(correct->child)) {
+		free(trans_src);
+		if (!(trans_src = STRING_NEW()))
+			goto cleanup;
 		string_append(&correct_str, "\nDid you mean: \"%s\"\n",
 				correct->child->next->valuestring);
-		memset(trans_src, 0, strlen(trans_src));
 		string_append(&trans_src, correct->child->next->valuestring);
 	}
 
@@ -309,8 +311,7 @@ full_mode(void)
 		lang_v = get_lang(langdest->valuestring);
 		string_append(&lang_str, "\n[%s]: %s",
 				langdest->valuestring,
-				lang_v ? lang_v : ""
-				);
+				lang_v ? lang_v : "");
 	}
 
 	/* get synonyms */
@@ -367,7 +368,7 @@ full_mode(void)
 			trans_src, lang_str, trans_dest,
 			lang.dest, get_lang(lang.dest));
 	string_append(&result, "%s", spell_str);
-	string_append(&result, "%s", syn_str);
+	string_append(&result, "%s\n", syn_str);
 	string_append(&result, "%s", example_str);
 
 	/* print to stdout */
