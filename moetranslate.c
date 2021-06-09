@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -56,7 +57,7 @@ static struct Translate tr;
 static char *
 ltrim(const char *str)
 {
-	while (isspace(*str))
+	while (*str && isspace((unsigned char)(*str)))
 		str++;
 	return (char*)str;
 }
@@ -66,7 +67,7 @@ static char *
 rtrim(char *str)
 {
 	char *end = str + strlen(str) -1;
-	while (end > str && isspace(*end)) {
+	while (end > str && isspace((unsigned char)(*end))) {
 		*end = '\0';
 		end--;
 	}
@@ -144,7 +145,7 @@ full_mode(void)
 
 	/* cJSON Parser */
 	/* get translation */
-	int count_tr = 0;
+	uint8_t count_tr = 0;
 	trans = cJSON_GetArrayItem(parser, 0);
 	if (!(trans_src = STRING_NEW()))
 		goto cleanup;
@@ -162,7 +163,7 @@ full_mode(void)
 	}
 
 	/* get spelling */
-	int count_spell = 0;
+	uint8_t count_spell = 0;
 	spell = cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0), count_tr -1);
 	if (!(spell_str = STRING_NEW()))
 		goto cleanup;
@@ -209,7 +210,7 @@ full_mode(void)
 
 	/* get synonyms */
 	char *syn_tmp;
-	int count_syn = 0;
+	uint8_t count_syn = 0;
 	synonym = cJSON_GetArrayItem(parser, 1);
 	if (!(syn_str = STRING_NEW()))
 		goto cleanup;
@@ -241,7 +242,7 @@ full_mode(void)
 		string_append(&syn_str, "\n");
 
 	/* get examples */
-	int max = 5; /* examples max */
+	uint8_t max = 5; /* examples max */
 	example = cJSON_GetArrayItem(parser, 13);
 	if (!(example_str = STRING_NEW()))
 		goto cleanup;
@@ -375,7 +376,7 @@ html_cleaner(char **dest)
 {
 	char *p		= (*dest);
 	char *tmp	= NULL;
-	int i		= 0;
+	size_t i	= 0;
 	
 	if (!(tmp = calloc(sizeof(char), strlen(*dest)+1)))
 		return (*dest);

@@ -20,18 +20,16 @@ options:
 	@echo "CC	= ${CC}"
 
 .c.o:
-	@echo CC $<
 	${CC} -c ${CFLAGS} $<
 
 ${OBJ}: config.h config.mk
 
 ${TARGET}: ${OBJ}
-	@echo CC -c $@
-	@${CC} -o $@ ${OBJ} ${LDFLAGS}
+	${CC} -o $@ ${OBJ} ${LDFLAGS}
 
 clean:
 	@echo cleaning
-	rm -f ${TARGET} ${OBJ} ${TARGET}-${VERSION}.tar.gz
+	@rm -f ${TARGET} ${OBJ} ${TARGET}-${VERSION}.tar.gz
 
 dist:
 	@echo creating dist tarball
