@@ -42,7 +42,7 @@ static void brief_mode(void);
 static void full_mode(void);
 static char *url_parser(CURL *curl);
 static char *request_handler(void);
-static char *html_cleaner(char **dest);
+static char *trim_tag(char **dest, char tag);
 static char *string_append(char **dest, const char *fmt, ...);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
@@ -78,7 +78,8 @@ static char *
 get_lang(const char *lcode)
 {
 	size_t lcode_len = strlen(lcode);
-	for (size_t i = 0; i < LENGTH(lang_code); i++) {
+	size_t lang_len = LENGTH(lang_code);
+	for (size_t i = 0; i < lang_len; i++) {
 		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
 			return (char*)lang_code[i][1];
 	}
@@ -258,7 +259,7 @@ full_mode(void)
 				max--;
 			}
 		}
-		html_cleaner(&example_str);
+		trim_tag(&example_str, 'b');
 	}
 	
 	/* output */
@@ -372,7 +373,7 @@ cleanup:
 }
 
 static char *
-html_cleaner(char **dest)
+trim_tag(char **dest, char tag)
 {
 	char *p		= (*dest);
 	char *tmp	= NULL;
@@ -385,9 +386,9 @@ html_cleaner(char **dest)
 	 * can caused segfault
 	 */
 	while (*p) {
-		if (*p == '<' && *(p+1) == 'b' && *(p+2) == '>')
+		if (*p == '<' && *(p+1) == tag && *(p+2) == '>')
 			p += 3;
-		else if (*p == '<' && *(p+1) == '/' && *(p+2) == 'b' &&
+		else if (*p == '<' && *(p+1) == '/' && *(p+2) == tag &&
 			       	*(p+3) == '>')
 			p += 4;
 		tmp[i] = (*p);
