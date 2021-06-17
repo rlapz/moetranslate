@@ -6,6 +6,7 @@
  */
 
 static long timeout		= 10L; /* set request timout (10s) */
+static const uint8_t example_max_line	= 5;	/* example lines */
 static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
 	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
