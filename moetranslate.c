@@ -4,6 +4,7 @@
  *
  * See LICENSE file for license details
  */
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -16,10 +17,10 @@
 
 
 /* macros */
-#define STRING_NEW()\
-	(calloc(sizeof(char), sizeof(char)))
 #define LENGTH(X)\
 	(sizeof(X) / sizeof(X[0]))
+#define STRING_NEW()\
+	(calloc(1, 1))
 
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
@@ -37,54 +38,21 @@ struct Memory {
 };
 
 /* function declaration */
-static char *ltrim(const char *str);
-static char *rtrim(char *str);
-static char *get_lang(const char *lcode);
 static void brief_mode(Translate *tr);
 static void full_mode(Translate *tr);
-static char *url_parser(Translate *tr, CURL *curl);
+static char *get_lang(const char *lcode);
+static char *ltrim(const char *str);
 static char *request_handler(Translate *tr);
-static char *string_append(char **dest, const char *fmt, ...);
-static char *trim_tag(char **dest, char tag);
+static char *rtrim(char *str);
+static void string_append(char **dest, const char *fmt, ...);
+static void trim_tag(char **dest, char tag);
+static char *url_parser(Translate *tr, CURL *curl);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
 /* function implementations */
-/* left trimming */
-static char *
-ltrim(const char *str)
-{
-	while (*str && isspace((unsigned char)(*str)))
-		str++;
-	return (char*)str;
-}
-
-/* right trimming */
-static char *
-rtrim(char *str)
-{
-	char *end = str + strlen(str) -1;
-	while (end > str && isspace((unsigned char)(*end))) {
-		*end = '\0';
-		end--;
-	}
-	return str;
-}
-
-static char *
-get_lang(const char *lcode)
-{
-	size_t lcode_len = strlen(lcode);
-	size_t lang_len = LENGTH(lang_code);
-	for (size_t i = 0; i < lang_len; i++) {
-		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
-			return (char*)lang_code[i][1];
-	}
-	return NULL;
-}
-
 static void
 brief_mode(Translate *tr)
 {
@@ -96,8 +64,9 @@ brief_mode(Translate *tr)
 
 	/* cJSON parser */
 	if ((parser = cJSON_Parse(req_str)) == NULL) {
+		errno = EINVAL;
 		perror("brief_mode(): cJSON_Parse()");
-		goto cleanup;
+		exit(EXIT_FAILURE);
 	}
 
 	/* dest[i][0][0] */
@@ -109,7 +78,6 @@ brief_mode(Translate *tr)
 	}
 	puts("");
 
-cleanup:
 	cJSON_Delete(parser);
 	free(req_str);
 }
@@ -125,24 +93,23 @@ full_mode(Translate *tr)
 		exit(EXIT_FAILURE);
 	
 	/* test  */
-	/* fprintf(stdout, "%s\n", req_str); */
+	// fprintf(stdout, "%s\n", req_str);
 
 	/* cJSON parser */
 	if ((parser = cJSON_Parse(req_str)) == NULL) {
-		perror("full_mode(): cJSON_Parse()");
-		goto cleanup;
+		errno = EINVAL;
+		perror("full_mode(): cJSON_Parse() : Parsing error!"
+			"Check your connection or change your IP"
+			);
+		exit(EXIT_FAILURE);
 	}
 
 	/* cJSON Parser */
 	/* get translation */
-	char *trans_src		= NULL;
-	char *trans_dest	= NULL;
+	char *trans_src		= STRING_NEW();
+	char *trans_dest	= STRING_NEW();
 	uint8_t count_tr	= 0;
 	cJSON *trans		= cJSON_GetArrayItem(parser, 0);
-	if ((trans_src = STRING_NEW()) == NULL)
-	       goto cleanup;
-	if ((trans_dest = STRING_NEW()) == NULL)
-		goto cleanup;
 	cJSON_ArrayForEach(iterator, trans) {
 		cJSON *trans_val = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(trans_val)) {
@@ -153,14 +120,15 @@ full_mode(Translate *tr)
 		}
 		count_tr++;
 	}
+	if (strlen(trans_src) == 0)
+		exit(EXIT_FAILURE);
+
 
 	/* get spelling */
 	char *spell_str		= STRING_NEW();
 	uint8_t count_spell	= 0;
 	cJSON *spell		= cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0),
 							count_tr -1);
-	if (spell_str == NULL)
-		goto cleanup;
 	if (cJSON_GetArraySize(spell) < 6) {
 		string_append(&spell_str, "\n");
 		cJSON_ArrayForEach(iterator, spell) {
@@ -180,12 +148,9 @@ full_mode(Translate *tr)
 	/* get correction */
 	char *correct_str	= STRING_NEW();
 	cJSON *correct		= cJSON_GetArrayItem(parser, 7);
-	if (correct_str == NULL)
-		goto cleanup;
 	if (cJSON_IsString(correct->child)) {
 		free(trans_src);
-		if ((trans_src = STRING_NEW()) == NULL)
-			goto cleanup;
+		trans_src = STRING_NEW();
 		string_append(&correct_str,
 				"\n\033[1m\033[37mDid you mean: \033[0m\"%s\"?\n",
 				correct->child->next->valuestring);
@@ -196,8 +161,6 @@ full_mode(Translate *tr)
 	char *lang_v		= NULL;
 	char *lang_str		= STRING_NEW();
 	cJSON *langdest		= cJSON_GetArrayItem(parser, 2);
-	if (lang_str == NULL)
-		goto cleanup;
 	if (cJSON_IsString(langdest)) {
 		lang_v = get_lang(langdest->valuestring);
 		string_append(&lang_str, "\n[%s]: %s",
@@ -206,12 +169,10 @@ full_mode(Translate *tr)
 	}
 
 	/* get synonyms */
-	char *syn_tmp		= NULL;
 	char *syn_str		= STRING_NEW();
+	char *syn_tmp		= NULL;
 	uint8_t count_syn	= 0;
 	cJSON *synonym		= cJSON_GetArrayItem(parser, 1);
-	if (syn_str == NULL)
-		goto cleanup;
 	cJSON_ArrayForEach(iterator, synonym) {
 		syn_tmp = iterator->child->valuestring;
 		syn_tmp[0] = toupper(syn_tmp[0]);
@@ -246,8 +207,7 @@ full_mode(Translate *tr)
 	char *example_str	= STRING_NEW();
 	uint8_t max		= example_max_line;
 	cJSON *example		= cJSON_GetArrayItem(parser, 13);
-	if ((example_str = STRING_NEW()) == NULL)
-	       goto cleanup;
+
 	if (!cJSON_IsNull(example)) {
 		string_append(&example_str, "\n%s\n",
 				"------------------------------------");
@@ -263,12 +223,15 @@ full_mode(Translate *tr)
 		}
 		trim_tag(&example_str, 'b');
 	}
+
+	if (trans_src == NULL || trans_dest == NULL ||
+			req_str == NULL || spell_str == NULL ||
+			lang_str == NULL || syn_str == NULL ||
+			correct_str == NULL || example_str == NULL) {
+		exit(EXIT_FAILURE);
+	}
 	
 	/* output */
-	/* experimental */
-	if (strlen(trans_src) == 0)
-		goto cleanup;
-
 	/* print to stdout */
 	fprintf(stdout, "%s\"%s\"%s\n\n%s\n[%s]: %s\n%s%s%s",
 			correct_str,
@@ -285,34 +248,28 @@ full_mode(Translate *tr)
 	free(correct_str);
 	free(example_str);
 
-cleanup:
 	cJSON_Delete(parser);
 }
 
 static char *
-url_parser(Translate *tr, CURL *curl)
+get_lang(const char *lcode)
 {
-	char *ret		= NULL;
-	char *text_encode	= NULL;
-
-	/* text encoding */
-	text_encode = curl_easy_escape(curl, tr->text, (int)strlen(tr->text));
-	if (text_encode == NULL) {
-		perror("url_parser(): curl_easy_escape()");
-		return NULL;
+	size_t lcode_len = strlen(lcode);
+	size_t lang_len = LENGTH(lang_code);
+	for (size_t i = 0; i < lang_len; i++) {
+		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
+			return (char*)lang_code[i][1];
 	}
+	return NULL;
+}
 
-	if ((ret = STRING_NEW()) == NULL)
-		goto cleanup;
-
-	string_append(&ret, "%s", url_google);
-	string_append(&ret, url_params[tr->mode],
-			tr->src, tr->dest, text_encode);
-
-cleanup:
-	curl_free(text_encode);
-
-	return ret;
+/* left trimming */
+static char *
+ltrim(const char *str)
+{
+	while (*str && isspace((unsigned char)(*str)))
+		str++;
+	return (char*)str;
 }
 
 static char *
@@ -366,36 +323,19 @@ cleanup:
 	return mem.memory;
 }
 
+/* right trimming */
 static char *
-trim_tag(char **dest, char tag)
+rtrim(char *str)
 {
-	char *p		= (*dest);
-	char *tmp	= NULL;
-	size_t i	= 0;
-	
-	if ((tmp = calloc(sizeof(char), strlen(*dest) +1)) ==NULL)
-		return (*dest);
-
-	/* UNSAFE
-	 * can caused segfault
-	 */
-	while (*p != '\0') {
-		if (*p == '<' && *(p+1) == tag && *(p+2) == '>')
-			p += 3;
-		else if (*p == '<' && *(p+1) == '/' && *(p+2) == tag &&
-			       	*(p+3) == '>')
-			p += 4;
-		tmp[i] = (*p);
-		i++;
-		p++;
+	char *end = str + strlen(str) -1;
+	while (end > str && isspace((unsigned char)(*end))) {
+		*end = '\0';
+		end--;
 	}
-	free(*dest);
-	(*dest) = tmp;
-
-	return (*dest);
+	return str;
 }
 
-static char *
+static void
 string_append(char **dest, const char *fmt, ...)
 {
 	char *tmp_p	= NULL;
@@ -404,36 +344,89 @@ string_append(char **dest, const char *fmt, ...)
 	size_t size	= 0;
 	va_list vargs;
 
+	if ((*dest) == NULL)
+	return;
+
 	/* determine required size */
 	va_start(vargs, fmt);
 	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
 	va_end(vargs);
 
 	if (n < 0)
-		goto cleanup;
+		return;
 
 	size = (size_t)n +1; /* one extra byte for '\0' */
 	if ((tmp_p = malloc(size)) == NULL)
-		goto cleanup;
+		return;
 
 	va_start(vargs, fmt);
 	n = vsnprintf(tmp_p, size, fmt, vargs);
 	va_end(vargs);
 
 	if (n < 0)
-		goto cleanup;
+		return;
 
 	tmp_dest = realloc((*dest), (strlen((*dest)) + size));
 	if (tmp_dest == NULL)
-		goto cleanup;
+		return;
 
 	(*dest) = tmp_dest;
 	strncat((*dest), tmp_p, size -1);
 
-cleanup:
-	if (tmp_p)
-		free(tmp_p);
-	return (*dest);
+	free(tmp_p);
+}
+
+/* trim html tag ( <b>...</b> ) */
+static void
+trim_tag(char **dest, char tag)
+{
+	char *p	= (*dest);
+	char tmp[BUFSIZ];
+	size_t i = 0, j = 0;
+
+	/* UNSAFE */
+	while (p[i] != '\0' && j < BUFSIZ) {
+		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
+				p[i+2] == '>')
+			i += 3;
+		if (p[i] == '<' && p[i+1] == '/' && p[i+2] == tag &&
+			       	p[i+3] == '>')
+			i += 4;
+
+		tmp[j] = p[i];
+		j++;
+
+		if (p[i] == '\0')
+			break;
+		i++;
+	}
+	strncpy((*dest), tmp, j);
+	(*dest)[j] = '\0';
+}
+
+static char *
+url_parser(Translate *tr, CURL *curl)
+{
+	char *ret		= STRING_NEW();
+	char *text_encode	= NULL;
+
+	/* text encoding */
+	text_encode = curl_easy_escape(curl, tr->text, (int)strlen(tr->text));
+	if (text_encode == NULL) {
+		perror("url_parser(): curl_easy_escape()");
+		return NULL;
+	}
+
+	string_append(&ret, "%s", url_google);
+	if (tr->mode == BRIEF)
+		string_append(&ret, url_params[tr->mode],
+			tr->src, tr->dest, text_encode);
+	else
+		string_append(&ret, url_params[tr->mode],
+			tr->src, tr->dest, tr->dest, text_encode);
+
+	curl_free(text_encode);
+	return ret;
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */

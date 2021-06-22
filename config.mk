@@ -13,8 +13,8 @@ INCS = -I. lib/*.c
 LIBS = -lcurl
 
 # flags
-CFLAGS += -g -std=c99 -pedantic -Wall -Wextra ${INCS}
-LDFLAGS += -g ${LIBS}
+CFLAGS += -g -std=c99 -pedantic -Wall -Wextra ${INCS} -Os
+LDFLAGS += ${LIBS}
 
 # compiler and linker
 CC ?= cc
