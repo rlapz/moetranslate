@@ -254,10 +254,9 @@ full_mode(Translate *tr)
 static char *
 get_lang(const char *lcode)
 {
-	size_t lcode_len = strlen(lcode);
 	size_t lang_len = LENGTH(lang_code);
 	for (size_t i = 0; i < lang_len; i++) {
-		if (strncmp(lcode, lang_code[i][0], lcode_len) == 0)
+		if (strncmp(lcode, lang_code[i][0], 5) == 0)
 			return (char*)lang_code[i][1];
 	}
 	return NULL;
@@ -472,7 +471,7 @@ main(int argc, char *argv[])
 		fprintf(stderr, "Unknown \"%s\" source language code\n", argv[1]);
 		return EXIT_FAILURE;
 	}
-	if (strcmp(argv[2], "auto") == 0 && get_lang(argv[2]) == NULL) {
+	if (strcmp(argv[2], "auto") == 0 || get_lang(argv[2]) == NULL) {
 		fprintf(stderr, "Unknown \"%s\" target language code\n", argv[2]);
 		return EXIT_FAILURE;
 	}
