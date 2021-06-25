@@ -9,11 +9,11 @@ PREFIX = /usr
 #MANPREFIX = ${PREFIX}/share/man
 
 # includes and libs
-INCS = -I. lib/*.c
+INCS =  
 LIBS = -lcurl
 
 # flags
-CFLAGS += -g -std=c99 -pedantic -Wall -Wextra ${INCS} -Os
+CFLAGS += -std=c99 -pedantic -Wall -Wextra -Wno-deprecated-declarations ${INCS} -Os
 LDFLAGS += ${LIBS}
 
 # compiler and linker

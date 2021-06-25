@@ -9,10 +9,11 @@ static long timeout		= 10L; /* set request timout (10s) */
 static const uint8_t example_max_line	= 5;	/* example lines */
 static const char url_google[]	= "https://translate.googleapis.com/translate_a/single?";
 static const char *url_params[]	= {
-	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&sl=%s&tl=%s&dt=t&q=%s",
+	[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=t",
 	[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&"
-		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"
+		  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca"
 };
+
 
 /* 17 109 */
 static const char *const lang_code[109][17] = {

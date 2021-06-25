@@ -39,7 +39,3 @@ moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
 
 ## Language Code:
 https://cloud.google.com/translate/docs/languages
-
-
-## TODO:
-1. Add Yandex Translate API

@@ -4,24 +4,21 @@
  *
  * See LICENSE file for license details
  */
-#include <errno.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
 #include <ctype.h>
-#include <stdlib.h>
+#include <errno.h>
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <curl/curl.h>
 
-#include "lib/cJSON.h"
+#include "util.h"
+#include "cJSON.h"
 
 
 /* macros */
-#define LENGTH(X)\
-	(sizeof(X) / sizeof(X[0]))
-#define STRING_NEW()\
-	(calloc(1, 1))
-
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
 
@@ -41,11 +38,7 @@ struct Memory {
 static void brief_mode(Translate *tr);
 static void full_mode(Translate *tr);
 static char *get_lang(const char *lcode);
-static char *ltrim(const char *str);
 static char *request_handler(Translate *tr);
-static char *rtrim(char *str);
-static void string_append(char **dest, const char *fmt, ...);
-static void trim_tag(char **dest, char tag);
 static char *url_parser(Translate *tr, CURL *curl);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
@@ -60,13 +53,12 @@ brief_mode(Translate *tr)
 	cJSON *parser, *iterator;
 
 	if ((req_str = request_handler(tr)) == NULL)
-		exit(EXIT_FAILURE);
+		die("brief_mode(): request_handler()");
 
 	/* cJSON parser */
 	if ((parser = cJSON_Parse(req_str)) == NULL) {
 		errno = EINVAL;
-		perror("brief_mode(): cJSON_Parse()");
-		exit(EXIT_FAILURE);
+		die("brief_mode(): cJSON_Parse()");
 	}
 
 	/* dest[i][0][0] */
@@ -90,7 +82,7 @@ full_mode(Translate *tr)
 
 	/* init curl session */
 	if ((req_str = request_handler(tr)) == NULL)
-		exit(EXIT_FAILURE);
+		die("full_mode() : request_handler()");
 	
 	/* test  */
 	// fprintf(stdout, "%s\n", req_str);
@@ -98,10 +90,7 @@ full_mode(Translate *tr)
 	/* cJSON parser */
 	if ((parser = cJSON_Parse(req_str)) == NULL) {
 		errno = EINVAL;
-		perror("full_mode(): cJSON_Parse() : Parsing error!"
-			"Check your connection or change your IP"
-			);
-		exit(EXIT_FAILURE);
+		die("full_mode(): cJSON_Parse(): Parsing error!");
 	}
 
 	/* cJSON Parser */
@@ -121,7 +110,7 @@ full_mode(Translate *tr)
 		count_tr++;
 	}
 	if (strlen(trans_src) == 0)
-		exit(EXIT_FAILURE);
+		die("full_mode(): Result empty!");
 
 
 	/* get spelling */
@@ -228,7 +217,7 @@ full_mode(Translate *tr)
 			req_str == NULL || spell_str == NULL ||
 			lang_str == NULL || syn_str == NULL ||
 			correct_str == NULL || example_str == NULL) {
-		exit(EXIT_FAILURE);
+		die("full_mode()");
 	}
 	
 	/* output */
@@ -260,15 +249,6 @@ get_lang(const char *lcode)
 			return (char*)lang_code[i][1];
 	}
 	return NULL;
-}
-
-/* left trimming */
-static char *
-ltrim(const char *str)
-{
-	while (*str && isspace((unsigned char)(*str)))
-		str++;
-	return (char*)str;
 }
 
 static char *
@@ -316,91 +296,9 @@ request_handler(Translate *tr)
 
 cleanup:
 	curl_easy_cleanup(curl);
-	if (url != NULL)
-		free(url);
+	free(url);
 
 	return mem.memory;
-}
-
-/* right trimming */
-static char *
-rtrim(char *str)
-{
-	char *end = str + strlen(str) -1;
-	while (end > str && isspace((unsigned char)(*end))) {
-		*end = '\0';
-		end--;
-	}
-	return str;
-}
-
-static void
-string_append(char **dest, const char *fmt, ...)
-{
-	char *tmp_p	= NULL;
-	char *tmp_dest	= NULL;
-	int n		= 0;
-	size_t size	= 0;
-	va_list vargs;
-
-	if ((*dest) == NULL)
-	return;
-
-	/* determine required size */
-	va_start(vargs, fmt);
-	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
-	va_end(vargs);
-
-	if (n < 0)
-		return;
-
-	size = (size_t)n +1; /* one extra byte for '\0' */
-	if ((tmp_p = malloc(size)) == NULL)
-		return;
-
-	va_start(vargs, fmt);
-	n = vsnprintf(tmp_p, size, fmt, vargs);
-	va_end(vargs);
-
-	if (n < 0)
-		return;
-
-	tmp_dest = realloc((*dest), (strlen((*dest)) + size));
-	if (tmp_dest == NULL)
-		return;
-
-	(*dest) = tmp_dest;
-	strncat((*dest), tmp_p, size -1);
-
-	free(tmp_p);
-}
-
-/* trim html tag ( <b>...</b> ) */
-static void
-trim_tag(char **dest, char tag)
-{
-	char *p	= (*dest);
-	char tmp[BUFSIZ];
-	size_t i = 0, j = 0;
-
-	/* UNSAFE */
-	while (p[i] != '\0' && j < BUFSIZ) {
-		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
-				p[i+2] == '>')
-			i += 3;
-		if (p[i] == '<' && p[i+1] == '/' && p[i+2] == tag &&
-			       	p[i+3] == '>')
-			i += 4;
-
-		tmp[j] = p[i];
-		j++;
-
-		if (p[i] == '\0')
-			break;
-		i++;
-	}
-	strncpy((*dest), tmp, j);
-	(*dest)[j] = '\0';
 }
 
 static char *
@@ -416,13 +314,9 @@ url_parser(Translate *tr, CURL *curl)
 		return NULL;
 	}
 
-	string_append(&ret, "%s", url_google);
-	if (tr->mode == BRIEF)
-		string_append(&ret, url_params[tr->mode],
+	string_append(&ret, "%s%s&sl=%s&tl=%s&q=%s",
+			url_google, url_params[tr->mode],
 			tr->src, tr->dest, text_encode);
-	else
-		string_append(&ret, url_params[tr->mode],
-			tr->src, tr->dest, tr->dest, text_encode);
 
 	curl_free(text_encode);
 	return ret;

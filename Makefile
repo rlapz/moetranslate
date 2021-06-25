@@ -8,7 +8,7 @@
 
 include config.mk
 
-SRC = *.c
+SRC = moetranslate.c util.c cJSON.c 
 OBJ = ${SRC:.c=.o}
 
 all: options ${TARGET}
