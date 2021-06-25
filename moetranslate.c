@@ -16,10 +16,19 @@
 #include "util.h"
 #include "cJSON.h"
 
-
 /* macros */
 #define BRIEF	0	/* brief mode */
 #define FULL	1	/* full mode */
+
+typedef struct {
+	char *lcode;	/* language code */
+	char *lang;
+} Language;
+
+typedef struct {
+	char	*memory;
+	size_t	size;
+} Memory;
 
 typedef struct {
 	int	mode;	/* mode translation */
@@ -28,10 +37,10 @@ typedef struct {
 	char	*text;	/* text/words */
 } Translate;
 
-struct Memory {
-	char	*memory;
-	size_t	size;
-};
+typedef struct {
+	char *base_url;
+	char *params[2]; /* url parameter (brief and full mode) */
+} Url;
 
 /* function declaration */
 static void brief_mode(Translate *tr);
@@ -242,10 +251,10 @@ full_mode(Translate *tr)
 static char *
 get_lang(const char *lcode)
 {
-	size_t lang_len = LENGTH(lang_code);
+	size_t lang_len = LENGTH(language);
 	for (size_t i = 0; i < lang_len; i++) {
-		if (strncmp(lcode, lang_code[i][0], 5) == 0)
-			return (char*)lang_code[i][1];
+		if (strncmp(lcode, language[i].lcode, 5) == 0)
+			return (char*)language[i].lang;
 	}
 	return NULL;
 }
@@ -253,9 +262,9 @@ get_lang(const char *lcode)
 static char *
 request_handler(Translate *tr)
 {
-	char *url		= NULL;
-	CURL *curl		= NULL;
-	struct Memory mem	= {.memory = NULL, .size = 0};
+	char *url	= NULL;
+	CURL *curl	= NULL;
+	Memory mem	= { NULL, 0 };
 	CURLcode ccode;
 
 	/* curl init */
@@ -314,7 +323,7 @@ url_parser(Translate *tr, CURL *curl)
 	}
 
 	string_append(&ret, "%s%s&sl=%s&tl=%s&q=%s",
-			url_google, url_params[tr->mode],
+			url_google.base_url, url_google.params[tr->mode],
 			tr->src, tr->dest, text_encode);
 
 	curl_free(text_encode);
@@ -325,9 +334,9 @@ url_parser(Translate *tr, CURL *curl)
 static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
-	char *ptr		= NULL;
-	struct Memory *mem	= (struct Memory*)data;
-	size_t realsize		= (size * nmemb);
+	char *ptr	= NULL;
+	Memory *mem	= (Memory*)data;
+	size_t realsize	= (size * nmemb);
 	
 	ptr = realloc(mem->memory, mem->size + realsize +1);
        	if (ptr == NULL) {
