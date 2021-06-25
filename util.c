@@ -85,12 +85,13 @@ string_append(char **dest, const char *fmt, ...)
 void
 trim_tag(char **dest, char tag)
 {
+#define B_SIZE 1024
 	char *p	= (*dest);
-	char tmp[BUFSIZ];
+	char tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
 	/* UNSAFE */
-	while (p[i] != '\0' && j < BUFSIZ) {
+	while (p[i] != '\0' && j < B_SIZE) {
 		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
 				p[i+2] == '>')
 			i += 3;

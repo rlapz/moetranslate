@@ -29,12 +29,12 @@ ${TARGET}: ${OBJ}
 
 clean:
 	@echo cleaning
-	@rm -f ${TARGET} ${OBJ} ${TARGET}-${VERSION}.tar.gz
+	rm -f ${TARGET} ${OBJ} moetranslate*.tar.gz
 
 dist:
 	@echo creating dist tarball
 	mkdir -p ${TARGET}-${VERSION}
-	cp -R LICENSE Makefile config.mk ${SRC} ${TARGET}-${VERSION}
+	cp -R README.md LICENSE Makefile config.mk config.h util.h cJSON.h ${SRC} ${TARGET}-${VERSION}
 	tar -cf ${TARGET}-${VERSION}.tar ${TARGET}-${VERSION}
 	gzip ${TARGET}-${VERSION}.tar
 	rm -rf ${TARGET}-${VERSION}

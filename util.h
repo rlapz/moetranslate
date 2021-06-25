@@ -8,7 +8,7 @@
 #include <string.h>
 
 #define STRING_NEW() (calloc(1, 1))
-#define LENGTH(X) ((sizeof(X) / (sizeof(X[0]))))
+#define LENGTH(X) (sizeof(X) / sizeof(X[0]))
 
 void die(const char *fmt, ...);
 char *ltrim(const char *str);
