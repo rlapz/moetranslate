@@ -5,13 +5,14 @@
  * See LICENSE file for license details
  */
 
-static long timeout		= 10L; /* set request timout (10s) */
 static const uint8_t example_max_line	= 5;	/* example lines */
+static const long timeout		= 10L;	/* set request timout (10s) */
+static const char user_agent[]		= "libcurl-agent/1.0";
 static const Url url_google = {
-	"https://translate.googleapis.com/translate_a/single?",
+	"https://translate.googleapis.com/translate_a/single?", /* base url */
 	{
-		[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=t",
-		[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&"
+		[BRIEF]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=t", /* url parameter (brief) */
+		[FULL]	= "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&" /* url parameter (full) */
 			  "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca"
 	}
 };

@@ -289,7 +289,7 @@ request_handler(Translate *tr)
 	/* write data to memory */
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&mem);
 	/* set user-agent */
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent);
 	/* set timeout */
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 
