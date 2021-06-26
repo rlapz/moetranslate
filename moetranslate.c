@@ -152,6 +152,9 @@ full_mode(Translate *tr)
 	if (cJSON_IsString(correct->child)) {
 		free(trans_src);
 		trans_src = STRING_NEW();
+		if (trans_src == NULL)
+			die("full_mode()");
+
 		string_append(&correct_str,
 				"\n\033[1m\033[37mDid you mean: \033[0m\"%s\"?\n",
 				correct->child->next->valuestring);
