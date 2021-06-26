@@ -124,7 +124,7 @@ full_mode(Translate *tr)
 	cJSON *spell		= cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0),
 							count_tr -1);
 	if (spell_str == NULL)
-		die("full_mode");
+		die("full_mode()");
 
 	if (cJSON_GetArraySize(spell) < 6) {
 		string_append(&spell_str, "\n");
@@ -145,6 +145,10 @@ full_mode(Translate *tr)
 	/* get correction */
 	char *correct_str	= STRING_NEW();
 	cJSON *correct		= cJSON_GetArrayItem(parser, 7);
+	
+	if (correct_str == NULL)
+		die("full_mode()");
+
 	if (cJSON_IsString(correct->child)) {
 		free(trans_src);
 		trans_src = STRING_NEW();
@@ -160,7 +164,7 @@ full_mode(Translate *tr)
 	cJSON *langdest		= cJSON_GetArrayItem(parser, 2);
 
 	if (lang_str == NULL)
-		die("full_mode");
+		die("full_mode()");
 
 	if (cJSON_IsString(langdest)) {
 		lang_v = get_lang(langdest->valuestring);
@@ -176,7 +180,7 @@ full_mode(Translate *tr)
 	cJSON *synonym		= cJSON_GetArrayItem(parser, 1);
 
 	if (syn_str == NULL)
-		die("full_mode");
+		die("full_mode()");
 
 	cJSON_ArrayForEach(iterator, synonym) {
 		syn_tmp = iterator->child->valuestring;
@@ -214,7 +218,7 @@ full_mode(Translate *tr)
 	cJSON *example		= cJSON_GetArrayItem(parser, 13);
 
 	if (example_str == NULL)
-		die("full_mode");
+		die("full_mode()");
 
 	if (!cJSON_IsNull(example)) {
 		string_append(&example_str, "\n%s\n",
@@ -295,7 +299,7 @@ request_handler(Translate *tr)
 
 	/* sending request */
 	if ((ccode = curl_easy_perform(curl)) != CURLE_OK)
-		die(curl_easy_strerror(ccode));
+		die("%s%s", "request_handler()", curl_easy_strerror(ccode));
 
 	curl_easy_cleanup(curl);
 	free(url);
