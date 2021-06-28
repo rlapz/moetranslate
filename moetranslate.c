@@ -4,10 +4,8 @@
  *
  * See LICENSE file for license details
  */
-#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -96,10 +94,10 @@ full_mode(Translate *tr)
 
 	/* cJSON Parser */
 	/* get translation */
-	char *trans_src		= STRING_NEW();
-	char *trans_dest	= STRING_NEW();
-	uint8_t count_tr	= 0;
-	cJSON *trans		= cJSON_GetArrayItem(parser, 0);
+	char *trans_src	= STRING_NEW();
+	char *trans_dest = STRING_NEW();
+	int count_tr	= 0;
+	cJSON *trans	= cJSON_GetArrayItem(parser, 0);
 
 	if (trans_src == NULL || trans_src == NULL)
 		die("full_mode()");
@@ -119,9 +117,9 @@ full_mode(Translate *tr)
 
 
 	/* get spelling */
-	char *spell_str		= STRING_NEW();
-	uint8_t count_spell	= 0;
-	cJSON *spell		= cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0),
+	char *spell_str	= STRING_NEW();
+	int count_spell	= 0;
+	cJSON *spell	= cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0),
 							count_tr -1);
 	if (spell_str == NULL)
 		die("full_mode()");
@@ -162,7 +160,7 @@ full_mode(Translate *tr)
 	}
 
 	/* get language */
-	char *lang_v		= NULL;
+	char *lang_v;
 	char *lang_str		= STRING_NEW();
 	cJSON *langdest		= cJSON_GetArrayItem(parser, 2);
 
@@ -177,17 +175,17 @@ full_mode(Translate *tr)
 	}
 
 	/* get synonyms */
-	char *syn_str		= STRING_NEW();
-	char *syn_tmp		= NULL;
-	uint8_t count_syn	= 0;
-	cJSON *synonym		= cJSON_GetArrayItem(parser, 1);
+	char *syn_tmp;
+	char *syn_str	= STRING_NEW();
+	int count_syn	= 0;
+	cJSON *synonym	= cJSON_GetArrayItem(parser, 1);
 
 	if (syn_str == NULL)
 		die("full_mode()");
 
 	cJSON_ArrayForEach(iterator, synonym) {
 		syn_tmp = iterator->child->valuestring;
-		syn_tmp[0] = toupper(syn_tmp[0]);
+		syn_tmp[0] = TOUPPER(syn_tmp[0]);
 
 		if (count_syn > 0)
 			string_append(&syn_str, "\n");
@@ -217,7 +215,7 @@ full_mode(Translate *tr)
 
 	/* get examples */
 	char *example_str	= STRING_NEW();
-	uint8_t max		= example_max_line;
+	int max			= example_max_line;
 	cJSON *example		= cJSON_GetArrayItem(parser, 13);
 
 	if (example_str == NULL)
@@ -333,7 +331,7 @@ url_parser(Translate *tr, CURL *curl)
 static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
-	char *ptr	= NULL;
+	char *ptr;
 	Memory *mem	= (Memory*)data;
 	size_t realsize	= (size * nmemb);
 	

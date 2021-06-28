@@ -9,6 +9,7 @@
 
 #define STRING_NEW() (calloc(1, 1))
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
+#define TOUPPER(S) ((S >= 97 && S <= 122) ? (S - 32) : (S))
 
 void die(const char *fmt, ...);
 char *ltrim(const char *str);

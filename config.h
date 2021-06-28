@@ -5,7 +5,7 @@
  * See LICENSE file for license details
  */
 
-static const uint8_t example_max_line	= 5;	/* example lines */
+static const int example_max_line	= 5;	/* example lines */
 static const long timeout		= 10L;	/* set request timout (10s) */
 static const char user_agent[]		= "libcurl-agent/1.0";
 static const Url url_google = {
