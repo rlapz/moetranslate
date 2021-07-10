@@ -43,42 +43,46 @@ rtrim(char *str)
 void
 string_append(char **dest, const char *fmt, ...)
 {
+	char *p		= (*dest);
 	char *tmp_p	= NULL;
-	char *tmp_dest	= NULL;
+	char *new_p	= NULL;
 	int n		= 0;
 	size_t size	= 0;
 	va_list vargs;
 
-	if ((*dest) == NULL)
+	if (p == NULL)
 		return;
 
 	/* determine required size */
 	va_start(vargs, fmt);
-	n = (size_t)vsnprintf(tmp_p, size, fmt, vargs);
+	n = (size_t)vsnprintf(new_p, size, fmt, vargs);
 	va_end(vargs);
 
 	if (n < 0)
 		return;
 
 	size = (size_t)n +1; /* one extra byte for '\0' */
-	if ((tmp_p = malloc(size)) == NULL)
+	if ((new_p = malloc(size)) == NULL)
 		return;
 
 	va_start(vargs, fmt);
-	n = vsnprintf(tmp_p, size, fmt, vargs);
+	n = vsnprintf(new_p, size, fmt, vargs);
 	va_end(vargs);
 
-	if (n < 0)
+	if (n < 0) {
+		free(new_p);
+		return;
+	}
+
+	tmp_p = realloc(p, strlen(p) + size);
+	if (tmp_p == NULL)
 		return;
 
-	tmp_dest = realloc((*dest), (strlen((*dest)) + size));
-	if (tmp_dest == NULL)
-		return;
+	p = tmp_p;
+	strncat(p, new_p, size -1);
+	(*dest) = p;
 
-	(*dest) = tmp_dest;
-	strncat((*dest), tmp_p, size -1);
-
-	free(tmp_p);
+	free(new_p);
 }
 
 /* trim html tag ( <b>...</b> ) */
@@ -106,7 +110,7 @@ trim_tag(char **dest, char tag)
 			break;
 		i++;
 	}
-	strncpy((*dest), tmp, j);
-	(*dest)[j] = '\0';
+	strncpy(p, tmp, j);
+	p[j] = '\0';
 }
 

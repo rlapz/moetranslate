@@ -15,8 +15,10 @@
 #include "cJSON.h"
 
 /* macros */
-#define BRIEF	0	/* brief mode */
-#define FULL	1	/* full mode */
+enum {
+	BRIEF = 0,
+	FULL
+};
 
 typedef struct {
 	char *lcode;	/* language code */
@@ -195,9 +197,8 @@ full_mode(Translate *tr)
 
 		cJSON *syn_val1;
 		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
-			string_append(&syn_str, "\n  \033[1m\033[37m%s:\033[0m\n",
+			string_append(&syn_str, "\n  \033[1m\033[37m%s:\033[0m\n\t",
 					syn_val1->child->valuestring);
-			string_append(&syn_str, "\t");
 
 			cJSON *syn_val2;
 			cJSON_ArrayForEach(syn_val2,
@@ -300,7 +301,7 @@ request_handler(Translate *tr)
 
 	/* sending request */
 	if ((ccode = curl_easy_perform(curl)) != CURLE_OK)
-		die("%s%s", "request_handler()", curl_easy_strerror(ccode));
+		die("%s: %s", "request_handler()", curl_easy_strerror(ccode));
 
 	curl_easy_cleanup(curl);
 	free(url);
@@ -312,9 +313,11 @@ static char *
 url_parser(Translate *tr, CURL *curl)
 {
 	char *ret = STRING_NEW();
+	if (ret == NULL)
+		die("url_parser()");
+
 	char *text_encode = curl_easy_escape(curl, tr->text,
 				(int)strlen(tr->text));
-
 	if (text_encode == NULL)
 		die("url_parser(): curl_easy_escape()");
 
