@@ -51,7 +51,7 @@ string_append(char **dest, const char *fmt, ...)
 	va_list vargs;
 
 	if (p == NULL)
-		return;
+		die("string_append(): dest = NULL");
 
 	/* determine required size */
 	va_start(vargs, fmt);
@@ -59,11 +59,11 @@ string_append(char **dest, const char *fmt, ...)
 	va_end(vargs);
 
 	if (n < 0)
-		return;
+		die("string_append(): n size");
 
 	size = (size_t)n +1; /* one extra byte for '\0' */
 	if ((new_p = malloc(size)) == NULL)
-		return;
+		die("string_append(): new_p");
 
 	va_start(vargs, fmt);
 	n = vsnprintf(new_p, size, fmt, vargs);
@@ -71,12 +71,12 @@ string_append(char **dest, const char *fmt, ...)
 
 	if (n < 0) {
 		free(new_p);
-		return;
+		die("string_append(): n size");
 	}
 
 	tmp_p = realloc(p, strlen(p) + size);
 	if (tmp_p == NULL)
-		return;
+		die("string_append(): tmp_p");
 
 	p = tmp_p;
 	strncat(p, new_p, size -1);

@@ -123,7 +123,7 @@ brief_mode(Translate *tr)
 			/* send the result to stdout */
 			printf("%s", cJSON_GetStringValue(value));
 	}
-	puts("");
+	putchar('\n');
 
 	cJSON_Delete(parser);
 	free(url);
@@ -305,8 +305,10 @@ full_mode(Translate *tr)
 			tr->dest, get_lang(tr->dest),
 			spell_str, syn_str, example_str);
 
+#if DEBUG
 	printf("\n-------\nSrc len: %zu\n", strlen(trans_src));
 	printf("Dest len: %zu\n", strlen(trans_dest));
+#endif
 
 	free(trans_src);
 	free(trans_dest);
@@ -440,7 +442,6 @@ main(int argc, char *argv[])
 		brief_mode(&tr);
 	else
 		full_mode(&tr);
-		
 
 	return EXIT_SUCCESS;
 }
