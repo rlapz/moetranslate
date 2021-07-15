@@ -31,9 +31,9 @@ sudo make uninstall
 ```
 moetranslate [-b/-f/-h] [SOURCE] [TARGET] [TEXT]
 
-[-b] = Brief Mode (only show simple output).
-[-f] = Full Mode.
-[-h] = Show help message.
+-b = Brief Mode (only show simple output).
+-f = Full Mode.
+-h = Show help message.
 ```
 
 
