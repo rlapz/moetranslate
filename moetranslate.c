@@ -16,8 +16,10 @@
 
 /* macros */
 enum {
-	BRIEF = 0,
-	FULL
+	ERR = -2,
+	NONE,
+	BRIEF,
+	FULL,
 };
 
 typedef struct {
@@ -43,22 +45,70 @@ typedef struct {
 } Url;
 
 /* function declaration */
+static int arg_parse(int argc, char **argv);
 static void brief_mode(Translate *tr);
 static void full_mode(Translate *tr);
 static char *get_lang(const char *lcode);
-static char *request_handler(Translate *tr);
+static char *request_handler(CURL *curl, const char *url);
 static char *url_parser(Translate *tr, CURL *curl);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *data);
+
+static void help(FILE *f);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
+static const char *argv0;
+
 /* function implementations */
+static int
+arg_parse(int argc, char **argv)
+{
+	int mode = 0;
+
+	if (argc == 2) {
+		if (strcmp(argv[1], "-h") == 0) {
+			help(stdout);
+			return NONE;
+		}
+	} else if (argc == 5) {
+		if (strcmp(argv[1], "-b") == 0)
+			mode = BRIEF;
+		else if (strcmp(argv[1], "-f") == 0)
+			mode = FULL;
+	} else {
+		goto err;
+	}
+
+	if (get_lang(argv[2]) == NULL) {
+		fprintf(stderr, "Unknown \"%s\" language code.\n", argv[2]);
+		goto err;
+	} else if (get_lang(argv[3]) == NULL) {
+		fprintf(stderr, "Unknown \"%s\" language code.\n", argv[3]);
+		goto err;
+	}
+
+	return mode;
+
+err:
+	errno = EINVAL;
+	fprintf(stderr, "%s!\n\n", strerror(errno));
+	help(stderr);
+	return ERR;
+}
+
 static void
 brief_mode(Translate *tr)
 {
 	cJSON *parser, *iterator;
-	char *req_str = request_handler(tr);
+	char *req_str, *url;
+	CURL *curl = NULL;
+
+	if ((curl = curl_easy_init()) == NULL)
+		die("brief_mode(): curl_easy_init()");
+
+	url	= url_parser(tr, curl);
+	req_str	= request_handler(curl, url);
 
 	/* cJSON parser */
 	if ((parser = cJSON_Parse(req_str)) == NULL) {
@@ -71,19 +121,28 @@ brief_mode(Translate *tr)
 		cJSON *value = cJSON_GetArrayItem(iterator, 0); /* index: 0 */
 		if (cJSON_IsString(value))
 			/* send the result to stdout */
-			fprintf(stdout, "%s", cJSON_GetStringValue(value));
+			printf("%s", cJSON_GetStringValue(value));
 	}
 	puts("");
 
 	cJSON_Delete(parser);
+	free(url);
 	free(req_str);
+	curl_easy_cleanup(curl);
 }
 
 static void
 full_mode(Translate *tr)
 {
 	cJSON *parser, *iterator;
-	char *req_str = request_handler(tr);
+	char *req_str, *url;
+	CURL *curl = NULL;
+
+	if ((curl = curl_easy_init()) == NULL)
+		die("full_mode(): curl_easy_init()");
+
+	url	= url_parser(tr, curl);
+	req_str	= request_handler(curl, url);
 	
 	/* test  */
 	// fprintf(stdout, "%s\n", req_str);
@@ -246,7 +305,9 @@ full_mode(Translate *tr)
 			tr->dest, get_lang(tr->dest),
 			spell_str, syn_str, example_str);
 
-	free(req_str);
+	printf("\n-------\nSrc len: %zu\n", strlen(trans_src));
+	printf("Dest len: %zu\n", strlen(trans_dest));
+
 	free(trans_src);
 	free(trans_dest);
 	free(spell_str);
@@ -255,7 +316,10 @@ full_mode(Translate *tr)
 	free(correct_str);
 	free(example_str);
 
+	free(url);
+	free(req_str);
 	cJSON_Delete(parser);
+	curl_easy_cleanup(curl);
 }
 
 static char *
@@ -271,19 +335,10 @@ get_lang(const char *lcode)
 }
 
 static char *
-request_handler(Translate *tr)
+request_handler(CURL *curl, const char *url)
 {
-	char *url;
-	CURL *curl	= NULL;
 	Memory mem	= { NULL, 0 };
 	CURLcode ccode;
-
-	/* curl init */
-	if ((curl = curl_easy_init()) == NULL)
-		die("request_handler(): curl_easy_init()");
-
-	/* url parser */
-	url = url_parser(tr, curl);
 
 	if ((mem.memory = malloc(1)) == NULL)
 		die("request_handler(): malloc()=>Memory.memory");
@@ -302,9 +357,6 @@ request_handler(Translate *tr)
 	/* sending request */
 	if ((ccode = curl_easy_perform(curl)) != CURLE_OK)
 		die("%s: %s", "request_handler()", curl_easy_strerror(ccode));
-
-	curl_easy_cleanup(curl);
-	free(url);
 
 	return mem.memory;
 }
@@ -350,50 +402,45 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 	return realsize;
 }
 
+static void
+help(FILE *f)
+{
+	fprintf(f, "moetranslate - Simple language translator\n\n"
+			"Usage: %s [-b] [SOURCE:TARGET] [TEXT]\n"
+			"       -b        Brief mode\n"
+			"       -f        Full mode\n"
+			"       -h        Show this help\n\n"
+			"Example:\n"
+			"   Brief Mode:  %s -b en:id \"Hello\"\n"
+			"   Full Mode :  %s -f id:en \"Halo\"\n"
+			"   Auto Lang :  %s -f auto:en \"こんにちは\"\n",
+		argv0, argv0, argv0, argv0);
+}
+
 
 int
 main(int argc, char *argv[])
 {
-	/* TODO
-	 * using "argparse"
-	 */
-	const char help[] = "%s SOURCE TARGET [-b] TEXT\n"
-				"Example:\n"
-				"\t[BRIEF MODE]\n"
-				"\t%s en id -b \"hello\"\n"
-				"\t[FULL MODE]\n"
-				"\t%s en id \"hello\"\n";
-	if (argc < 4) {
-		fprintf(stderr, help, argv[0], argv[0], argv[0]);
+	argv0 = argv[0];
+	int mode = arg_parse(argc, argv);
+
+	if (mode == NONE)
+		return EXIT_SUCCESS;
+	else if (mode == ERR)
 		return EXIT_FAILURE;
-	}
-	if (strcmp(argv[1], "auto") != 0 && get_lang(argv[1]) == NULL) {
-		fprintf(stderr, "Unknown \"%s\" source language code\n", argv[1]);
-		return EXIT_FAILURE;
-	}
-	if (strcmp(argv[2], "auto") == 0 || get_lang(argv[2]) == NULL) {
-		fprintf(stderr, "Unknown \"%s\" target language code\n", argv[2]);
-		return EXIT_FAILURE;
-	}
 
 	Translate tr;
 
-	tr.src = argv[1];
-	tr.dest = argv[2];
-	if (strcmp(argv[3], "-b") == 0) {
-		if (argv[4] == NULL || strlen(argv[4]) == 0) {
-			fprintf(stderr, help, argv[0], argv[0], argv[0]);
-			return EXIT_FAILURE;
-		}
-		tr.text = argv[4];
-		tr.mode = BRIEF;
-	} else {
-		tr.text = argv[3];
-		tr.mode = FULL;
-	}
+	tr.mode = mode;
+	tr.src = argv[2];
+	tr.dest = argv[3];
+	tr.text = ltrim((rtrim(argv[4])));
 
-	tr.text = ltrim((rtrim(tr.text)));
-	tr.mode == FULL ? full_mode(&tr) : brief_mode(&tr);
+	if (tr.mode == BRIEF)
+		brief_mode(&tr);
+	else
+		full_mode(&tr);
+		
 
 	return EXIT_SUCCESS;
 }
