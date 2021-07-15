@@ -408,14 +408,14 @@ static void
 help(FILE *f)
 {
 	fprintf(f, "moetranslate - Simple language translator\n\n"
-			"Usage: %s [-b] [SOURCE:TARGET] [TEXT]\n"
+			"Usage: %s [-b/-f/-h] [SOURCE] [TARGET] [TEXT]\n"
 			"       -b        Brief mode\n"
 			"       -f        Full mode\n"
 			"       -h        Show this help\n\n"
 			"Example:\n"
-			"   Brief Mode:  %s -b en:id \"Hello\"\n"
-			"   Full Mode :  %s -f id:en \"Halo\"\n"
-			"   Auto Lang :  %s -f auto:en \"こんにちは\"\n",
+			"   Brief Mode:  %s -b en id \"Hello\"\n"
+			"   Full Mode :  %s -f id en \"Halo\"\n"
+			"   Auto Lang :  %s -f auto en \"こんにちは\"\n",
 		argv0, argv0, argv0, argv0);
 }
 

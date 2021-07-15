@@ -6,7 +6,17 @@ Simple language translator written in C
 
 ## How to Install:
 
+### Debian-based:
+
 ```
+sudo apt install libcurl4-openssl-dev
+make && sudo make install
+```
+
+### Arch-based:
+
+```
+sudo pacman -S libcurl-gnutls
 make && sudo make install
 ```
 
@@ -19,23 +29,27 @@ sudo make uninstall
 ## How to Use:
 
 ```
-moetranslate SOURCE_LANGUAGE TARGET_LANGUAGE [-b] "TEXT"
+moetranslate [-b/-f/-h] [SOURCE] [TARGET] [TEXT]
 
-[-b] (optional) means "Brief Mode" (only show simple output)
+[-b] = Brief Mode (only show simple output).
+[-f] = Full Mode.
+[-h] = Show help message.
 ```
 
 
 1. Brief mode:
-	`moetranslate auto id -b "Hello world\!"`
+	`moetranslate -b auto id "Hello world\!"`
 
 	`auto`	-> automatic detection
 	`id`	-> Indonsian language code
 2. Full mode:
-	`moetranslate en id "Hello wrld\!"`
+	`moetranslate -f en id "Hello wrld\!"`
 
 	`en`	-> English language code
 
 	Will show translated WORD/SENTENCE with	more information.
+3. Show help:
+	`moetranslate -h`
 
 ## Language Code:
 https://cloud.google.com/translate/docs/languages
