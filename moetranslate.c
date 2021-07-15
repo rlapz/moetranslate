@@ -58,36 +58,52 @@ static void help(FILE *f);
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
+/* global vars */
 static const char *argv0;
 
 /* function implementations */
 static int
 arg_parse(int argc, char **argv)
 {
-	int mode = 0;
+	int mode;
 
-	if (argc == 2) {
-		if (strcmp(argv[1], "-h") == 0) {
-			help(stdout);
-			return NONE;
-		}
-	} else if (argc == 5) {
-		if (strcmp(argv[1], "-b") == 0)
-			mode = BRIEF;
-		else if (strcmp(argv[1], "-f") == 0)
-			mode = FULL;
+	switch (argc) {
+	case 2:
+		goto opt1;
+	case 5:
+		goto opt2;
+	default:
+		goto err;
+	}
+
+
+opt1:
+	if (strcmp(argv[1], "-h") == 0) {
+		help(stdout);
+		/* exit(0) */
+		return NONE;
 	} else {
 		goto err;
 	}
 
+opt2:
+	if (strcmp(argv[1], "-b") == 0)
+		mode = BRIEF;
+	else if (strcmp(argv[1], "-f") == 0)
+		mode = FULL;
+	else
+		goto err;
+
 	if (get_lang(argv[2]) == NULL) {
 		fprintf(stderr, "Unknown \"%s\" language code.\n", argv[2]);
 		goto err;
-	} else if (get_lang(argv[3]) == NULL) {
+	} else if (get_lang(argv[3]) == NULL ||
+			strcmp(argv[3], "auto") == 0) {
 		fprintf(stderr, "Unknown \"%s\" language code.\n", argv[3]);
 		goto err;
 	}
 
+	/* success */
 	return mode;
 
 err:
@@ -367,9 +383,6 @@ static char *
 url_parser(Translate *tr, CURL *curl)
 {
 	char *ret = STRING_NEW();
-	if (ret == NULL)
-		die("url_parser()");
-
 	char *text_encode = curl_easy_escape(curl, tr->text,
 				(int)strlen(tr->text));
 	if (text_encode == NULL)
