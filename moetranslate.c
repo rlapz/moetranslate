@@ -11,10 +11,15 @@
 
 #include <curl/curl.h>
 
-#include "util.h"
 #include "cJSON.h"
+#include "util.h"
 
 /* macros */
+#define GREEN_BOLD_E	"\033[01;32m"
+#define WHITE_BOLD_E	"\033[01;01m"
+
+#define END_E		"\033[00m"
+
 enum {
 	ERR = -2,
 	NONE,
@@ -183,7 +188,7 @@ full_mode(const Translate *tr)
 	cJSON_ArrayForEach(iterator, trans) {
 		cJSON *trans_val = cJSON_GetArrayItem(iterator, 0);
 		if (cJSON_IsString(trans_val)) {
-			append_string(trans_dest, "\033[1m\033[37m%s\033[0m",
+			append_string(trans_dest, WHITE_BOLD_E "%s" END_E,
 					trans_val->valuestring);
 			append_string(trans_src, "%s",
 					trans_val->next->valuestring);
@@ -232,8 +237,10 @@ full_mode(const Translate *tr)
 			die("full_mode(): get correction: trans_src");
 
 		append_string(correct_str,
-				"\n\033[1m\033[37mDid you mean: \033[0m\"%s\"?\n",
+				"\n" WHITE_BOLD_E "Did you mean: " END_E
+				"\"%s\"" WHITE_BOLD_E " ?" END_E "\n\n",
 				correct->child->next->valuestring);
+
 		append_string(trans_src, correct->child->next->valuestring);
 	}
 
@@ -268,12 +275,13 @@ full_mode(const Translate *tr)
 		if (count_syn > 0)
 			append_string(syn_str, "\n");
 
-		append_string(syn_str, "\n\033[01;01m[%s]:\033[00m",
+		append_string(syn_str, "\n" WHITE_BOLD_E "[%s]:" END_E,
 				syn_tmp);
 
 		cJSON *syn_val1;
 		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
-			append_string(syn_str, "\n  \033[01;01m%s:\033[00m\n\t",
+			append_string(syn_str,
+					"\n" WHITE_BOLD_E "%s:" END_E "\n\t",
 					syn_val1->child->valuestring);
 
 			cJSON *syn_val2;
@@ -395,7 +403,7 @@ url_parser(const Translate *tr, CURL *curl)
 		die("url_parser(): append_string");
 
 #if DEBUG
-	printf("\033[01;32mDEBUG:\033[00m url_parser: size of appended string: %zu\n", s);
+	printf(GREEN_BOLD_E "DEBUG:" END_E " url_parser: size of appended string: %zu\n", s);
 #endif
 
 	curl_free(text_encode);
@@ -443,7 +451,7 @@ int
 main(int argc, char *argv[])
 {
 #if DEBUG
-	printf("\033[01;32mDEBUG Mode\033[00m\n");
+	printf(GREEN_BOLD_E "DEBUG Mode" END_E "\n");
 #endif
 
 	argv0 = argv[0];
