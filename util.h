@@ -8,13 +8,22 @@
 #include <string.h>
 
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
-#define STRING_NEW() (calloc(1, 1))
-#define TOUPPER(S) ((S >= 97 && S <= 122) ? (S - 32) : (S))
+
+typedef struct {
+	char *value;
+	size_t length;
+} String;
+
 
 void die(const char *fmt, ...);
+
 char *ltrim(const char *str);
 char *rtrim(char *str);
-void string_append(char **dest, const char *fmt, ...);
-void trim_tag(char **str, char tag);
+
+size_t append_string(String *dest, const char *fmt, ...);
+void free_string(String *dest);
+String *new_string(void);
+
+void trim_tag(String *str, char tag);
 
 #endif

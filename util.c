@@ -40,57 +40,94 @@ rtrim(char *str)
 	return str;
 }
 
-void
-string_append(char **dest, const char *fmt, ...)
+size_t
+append_string(String *dest, const char *fmt, ...)
 {
-	char *p		= (*dest);
-	char *tmp_p	= NULL;
-	char *new_p	= NULL;
-	int n		= 0;
-	size_t size	= 0;
-	va_list vargs;
+	int n;
+	size_t len = 0;
+	char *new_s = NULL, *tmp = NULL;
+	va_list v;
 
-	if (p == NULL)
-		die("string_append(): dest = NULL");
+	if (dest == NULL || dest->value == NULL)
+		return 0;
 
 	/* determine required size */
-	va_start(vargs, fmt);
-	n = (size_t)vsnprintf(new_p, size, fmt, vargs);
-	va_end(vargs);
+	va_start(v, fmt);
+	n = (size_t)vsnprintf(new_s, len, fmt, v);
+	va_end(v);
 
 	if (n < 0)
-		die("string_append(): n size");
+		return 0;
 
-	size = (size_t)n +1; /* one extra byte for '\0' */
-	if ((new_p = malloc(size)) == NULL)
-		die("string_append(): new_p");
+	len = (size_t)n;
+	if ((new_s = malloc(len +1)) == NULL)
+		return 0;
 
-	va_start(vargs, fmt);
-	n = vsnprintf(new_p, size, fmt, vargs);
-	va_end(vargs);
+	va_start(v, fmt);
+	n = vsnprintf(new_s, len +1, fmt, v);
+	va_end(v);
 
 	if (n < 0) {
-		free(new_p);
-		die("string_append(): n size");
+		free(new_s);
+		return 0;
 	}
 
-	tmp_p = realloc(p, strlen(p) + size);
-	if (tmp_p == NULL)
-		die("string_append(): tmp_p");
+	tmp = realloc(dest->value, len + dest->length +1);
+	if (tmp == NULL)
+		return 0;
 
-	p = tmp_p;
-	strncat(p, new_p, size -1);
-	(*dest) = p;
+	strncat(tmp, new_s, len);
+	dest->value = tmp;
+	dest->length += (len);
 
-	free(new_p);
+	free(new_s);
+	return len;
 }
+
+void
+free_string(String *dest)
+{
+	if (dest == NULL)
+		return;
+
+	if (dest->value == NULL)
+		return;
+
+	free(dest->value);
+	dest->value = NULL;
+	dest->length = 0;
+
+	free(dest);
+	dest = NULL;
+}
+
+String *
+new_string(void)
+{
+	char *value = calloc(1, 1);
+	if (value == NULL)
+		return NULL;
+
+	String *str = malloc(sizeof(String));
+	if (str == NULL) {
+		free(value);
+		value = NULL;
+		return NULL;
+	}
+
+	str->value  = value;
+	str->length = 0;
+
+	return str;
+}
+
 
 /* trim html tag ( <b>...</b> ) */
 void
-trim_tag(char **dest, char tag)
+trim_tag(String *dest, char tag)
 {
 #define B_SIZE 1024
-	char *p	= (*dest);
+	char *p	= dest->value;
 	char tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
@@ -112,5 +149,6 @@ trim_tag(char **dest, char tag)
 	}
 	strncpy(p, tmp, j);
 	p[j] = '\0';
+	dest->length = j;
 }
 
