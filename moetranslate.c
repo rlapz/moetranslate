@@ -273,7 +273,7 @@ full_mode(const Translate *tr)
 
 		cJSON *syn_val1;
 		cJSON_ArrayForEach(syn_val1, cJSON_GetArrayItem(iterator, 2)) {
-			append_string(syn_str, "\n  \033[01;01mm%s:\033[00m\n\t",
+			append_string(syn_str, "\n  \033[01;01m%s:\033[00m\n\t",
 					syn_val1->child->valuestring);
 
 			cJSON *syn_val2;
@@ -322,11 +322,6 @@ full_mode(const Translate *tr)
 			trans_src->value, lang_str->value, trans_dest->value,
 			tr->dest, get_lang(tr->dest),
 			spell_str->value, syn_str->value, example_str->value);
-
-#if DEBUG
-	printf("\n-------\nSrc len: %zu\n", strlen(trans_src->value));
-	printf("Dest len: %zu\n", strlen(trans_dest->value));
-#endif
 
 	free_string(trans_src);
 	free_string(trans_dest);
@@ -393,10 +388,15 @@ url_parser(const Translate *tr, CURL *curl)
 	if (text_encode == NULL)
 		die("url_parser(): curl_easy_escape()");
 
-	if ((append_string(ret, "%s%s&sl=%s&tl=%s&hl=%s&q=%s",
+	size_t s = append_string(ret, "%s%s&sl=%s&tl=%s&hl=%s&q=%s",
 			url_google.base_url, url_google.params[tr->mode],
-			tr->src, tr->dest, tr->dest, text_encode)) == 0)
+			tr->src, tr->dest, tr->dest, text_encode);
+	if (s == 0)
 		die("url_parser(): append_string");
+
+#if DEBUG
+	printf("\033[01;32mDEBUG:\033[00m url_parser: size of appended string: %zu\n", s);
+#endif
 
 	curl_free(text_encode);
 
@@ -442,6 +442,10 @@ help(FILE *f)
 int
 main(int argc, char *argv[])
 {
+#if DEBUG
+	printf("\033[01;32mDEBUG Mode\033[00m\n");
+#endif
+
 	argv0 = argv[0];
 	int mode = arg_parse(argc, argv);
 

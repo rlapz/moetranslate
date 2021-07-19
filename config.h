@@ -6,7 +6,7 @@
  */
 
 #define DEBUG 0
-/* #define BUFFER_SIZE 4096 */
+
 static const int example_max_line	= 5;	/* example lines */
 static const long timeout		= 10L;	/* set request timeout (10s) */
 static const char user_agent[]		= "libcurl-agent/1.0";
