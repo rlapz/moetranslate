@@ -40,48 +40,72 @@ rtrim(char *str)
 	return str;
 }
 
-size_t
+/* trim html tag ( <b>...</b> ) */
+void
+trim_tag(String *dest, char tag)
+{
+#define B_SIZE 1024
+	char *p	= dest->value;
+	char tmp[B_SIZE];
+	size_t i = 0, j = 0;
+
+	/* UNSAFE */
+	while (p[i] != '\0' && j < B_SIZE) {
+		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
+				p[i+2] == '>')
+			i += 3;
+		if (p[i] == '<' && p[i+1] == '/' && p[i+2] == tag &&
+			       	p[i+3] == '>')
+			i += 4;
+
+		tmp[j] = p[i];
+		j++;
+
+		if (p[i] == '\0')
+			break;
+		i++;
+	}
+	strncpy(p, tmp, j);
+	p[j] = '\0';
+	/* don't forget to update string length */
+	dest->length = j;
+}
+
+int
 append_string(String *dest, const char *fmt, ...)
 {
 	int n;
-	size_t len = 0;
-	char *new_s = NULL, *tmp = NULL;
 	va_list v;
+	size_t len  = 0;
+	char *new_s = NULL;
 
 	if (dest == NULL || dest->value == NULL)
 		return 0;
 
 	/* determine required size */
 	va_start(v, fmt);
-	n = (size_t)vsnprintf(new_s, len, fmt, v);
+	n = vsnprintf(new_s, len, fmt, v);
 	va_end(v);
 
 	if (n < 0)
 		return 0;
 
-	len = (size_t)n;
-	if ((new_s = malloc(len +1)) == NULL)
+	len	= (size_t)n;
+	new_s	= realloc(dest->value, len + dest->length +1);
+	if (new_s == NULL)
 		return 0;
 
 	va_start(v, fmt);
-	n = vsnprintf(new_s, len +1, fmt, v);
+	n = vsnprintf(new_s + dest->length, len +1, fmt, v);
 	va_end(v);
 
-	if (n < 0) {
-		free(new_s);
-		return 0;
-	}
-
-	tmp = realloc(dest->value, len + dest->length +1);
-	if (tmp == NULL)
+	if (n < 0)
 		return 0;
 
-	strncat(tmp, new_s, len);
-	dest->value = tmp;
-	dest->length += (len);
+	dest->value   = new_s; 
+	dest->length += (size_t)len;
 
-	free(new_s);
-	return len;
+	return n;
 }
 
 void
@@ -119,36 +143,5 @@ new_string(void)
 	str->length = 0;
 
 	return str;
-}
-
-
-/* trim html tag ( <b>...</b> ) */
-void
-trim_tag(String *dest, char tag)
-{
-#define B_SIZE 1024
-	char *p	= dest->value;
-	char tmp[B_SIZE];
-	size_t i = 0, j = 0;
-
-	/* UNSAFE */
-	while (p[i] != '\0' && j < B_SIZE) {
-		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
-				p[i+2] == '>')
-			i += 3;
-		if (p[i] == '<' && p[i+1] == '/' && p[i+2] == tag &&
-			       	p[i+3] == '>')
-			i += 4;
-
-		tmp[j] = p[i];
-		j++;
-
-		if (p[i] == '\0')
-			break;
-		i++;
-	}
-	strncpy(p, tmp, j);
-	p[j] = '\0';
-	dest->length = j;
 }
 

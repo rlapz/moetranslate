@@ -19,11 +19,11 @@ void die(const char *fmt, ...);
 
 char *ltrim(const char *str);
 char *rtrim(char *str);
+void trim_tag(String *str, char tag);
 
-size_t append_string(String *dest, const char *fmt, ...);
+int append_string(String *dest, const char *fmt, ...);
 void free_string(String *dest);
 String *new_string(void);
 
-void trim_tag(String *str, char tag);
 
 #endif
