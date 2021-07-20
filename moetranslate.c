@@ -257,9 +257,12 @@ full_mode(const Translate *tr)
 					syn_dest->child->valuestring);
 
 			cJSON *syn_src;
+			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(syn_dest, 1))-1;
 			cJSON_ArrayForEach(syn_src, cJSON_GetArrayItem(syn_dest, 1)) {
 				printf("%s", syn_src->valuestring);
-				printf(", ");
+				if (syn_src_size > 1)
+					printf(", ");
+				syn_src_size--;
 			}
 		}
 		putchar('\n');
@@ -278,6 +281,7 @@ full_mode(const Translate *tr)
 				if (max == 0)
 					break;
 				example_str = example_val->child->valuestring;
+				example_str[0] = toupper(example_str[0]);
 				printf("%s\n", trim_tag(example_str, 'b'));
 				max--;
 			}
