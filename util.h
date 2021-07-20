@@ -19,7 +19,7 @@ void die(const char *fmt, ...);
 
 char *ltrim(const char *str);
 char *rtrim(char *str);
-void trim_tag(String *str, char tag);
+char *trim_tag(char *str, char tag);
 
 int append_string(String *dest, const char *fmt, ...);
 void free_string(String *dest);

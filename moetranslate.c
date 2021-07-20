@@ -188,183 +188,101 @@ full_mode(const Translate *tr)
 			cJSON_Print(parser));
 #endif
 
-	/* get translation */
-	int count_tr	   = 0;
-	String *trans_src  = new_string();
-	String *trans_dest = new_string();
-	cJSON *trans	   = cJSON_GetArrayItem(parser, 0);
 
-	if (trans_src == NULL || trans_dest == NULL)
-		die("full_mode(): get translation");
+	/* get spelling array item */
+	cJSON *spell = cJSON_GetArrayItem(parser->child, cJSON_GetArraySize(parser->child) -1);
 
-	cJSON_ArrayForEach(iterator, trans) {
-		cJSON *trans_val = cJSON_GetArrayItem(iterator, 0);
-		if (cJSON_IsString(trans_val)) {
-			append_string(trans_src, WHITE_BOLD_E "%s " END_E,
-					trans_val->next->valuestring);
-			append_string(trans_dest, GREEN_BOLD_E "%s" END_E,
-					trans_val->valuestring);
-		}
-		count_tr++;
+	/* source text */
+	printf("\"%s\"\n", tr->text);
+
+	/* source spelling */
+	cJSON *spell_src = cJSON_GetArrayItem(spell, 3);
+	if (cJSON_IsString(spell_src)) {
+		printf("( %s )\n", spell_src->valuestring);
 	}
-	if (trans_src->length == 0)
-		die("full_mode(): Result empty!");
+	putchar('\n');
 
-
-	/* get spelling */
-	String *spell_str_dest	= new_string();
-	String *spell_str_src	= new_string();
-	cJSON *spell		= cJSON_GetArrayItem(cJSON_GetArrayItem(parser, 0),
-							count_tr -1);
-	if (spell_str_dest == NULL || spell_str_src == NULL)
-		die("full_mode(): spell_str_*");
-
-	printf("%s\n\n", (cJSON_Print(spell)));
-
-	if (cJSON_IsArray(spell)) {
-		cJSON *spell_dest = cJSON_GetArrayItem(spell, 2);
-		cJSON *spell_src  = cJSON_GetArrayItem(spell, 3);
-
-		if (!cJSON_IsNull(spell_dest) && cJSON_IsString(spell_dest)) {
-			append_string(spell_str_dest, "\n( %s )",
-					spell_dest->valuestring);
-		}
-		if (!cJSON_IsNull(spell_src) && cJSON_IsString(spell_src)) {
-			append_string(spell_str_src, "\n( %s )",
-					cJSON_GetArrayItem(spell, 3)->valuestring);
-		}
-	}
 
 	/* get correction */
-	String *correct_str = new_string();
-	cJSON *correct	    = cJSON_GetArrayItem(parser, 7);
-
-	if (correct_str == NULL)
-		die("full_mode(): correct_str");
-
+	char *correct_str;
+	cJSON *correct = cJSON_GetArrayItem(parser, 7);
 	if (cJSON_IsString(correct->child)) {
-		free_string(trans_src);
-		trans_src = new_string();
-		if (trans_src == NULL)
-			die("full_mode(): get correction: trans_src");
-
-		append_string(correct_str,
-				"\n" WHITE_BOLD_E "Did you mean: " END_E
+		correct_str = correct->child->next->valuestring;
+		printf("\n" WHITE_BOLD_E "Did you mean: " END_E
 				"\"%s\"" WHITE_BOLD_E " ?" END_E "\n\n",
-				correct->child->next->valuestring);
-
-		append_string(trans_src, correct->child->next->valuestring);
+				correct_str);
 	}
 
-	/* get language */
-	String *lang_str = new_string();
-	cJSON *langdest  = cJSON_GetArrayItem(parser, 2);
+	/* dest text */
+	cJSON *trans = cJSON_GetArrayItem(parser, 0);
+	cJSON *trans_val;
+	cJSON_ArrayForEach(iterator, trans) {
+		trans_val = cJSON_GetArrayItem(iterator, 0);
+		if (cJSON_IsString(trans_val)) {
+			printf(WHITE_BOLD_E "%s" END_E, trans_val->valuestring);
+		}
+	}
+	putchar('\n');
 
-	if (lang_str == NULL)
-		die("full_mode(): lang_str");
+	/* dest spelling */
+	cJSON *spell_dest = cJSON_GetArrayItem(spell, 2);
+	if (cJSON_IsString(spell_dest)) {
+		printf("( %s )\n", spell_dest->valuestring);
+	}
+	putchar('\n');
 
-	if (cJSON_IsString(langdest)) {
-		char *lang_v = get_lang(langdest->valuestring);
-		append_string(lang_str, "\n" WHITE_BOLD_E "[%s]:" END_E " %s",
-				langdest->valuestring,
-				lang_v ? lang_v : "");
+	/* lang */
+	char *lang_dest_str;
+	cJSON *lang_dest = cJSON_GetArrayItem(parser, 2);
+	if (cJSON_IsString(lang_dest)) {
+		lang_dest_str = lang_dest->valuestring;
+		printf("\n" WHITE_BOLD_E "[%s]:" END_E " %s", lang_dest_str,
+				get_lang(lang_dest_str));
 	}
 
-	/* get synonyms */
-	String *syn_str = new_string();
-	cJSON *synonym	= cJSON_GetArrayItem(parser, 1);
+	printf(" -> " WHITE_BOLD_E "[%s]:" END_E " %s\n",
+			tr->dest, get_lang(tr->dest));
 
-	if (syn_str == NULL)
-		die("full_mode(): syn_str");
-
+	/* synonyms */
+	cJSON *synonym = cJSON_GetArrayItem(parser, 1);
 	cJSON_ArrayForEach(iterator, synonym) {
 		cJSON *syn_label = iterator->child;
 		syn_label->valuestring[0] = toupper(syn_label->valuestring[0]);
 
-		append_string(syn_str, "\n" WHITE_BOLD_E "[%s]:" END_E,
-				syn_label->valuestring);
+		printf("\n" WHITE_BOLD_E "[%s]:" END_E, syn_label->valuestring);
 
 		cJSON *syn_dest;
 		cJSON_ArrayForEach(syn_dest, cJSON_GetArrayItem(iterator, 2)) {
-			append_string(syn_str, "\n  " WHITE_BOLD_E "%s:" END_E "\n\t",
+			printf("\n " WHITE_BOLD_E "%s:" END_E "\n\t",
 					syn_dest->child->valuestring);
 
 			cJSON *syn_src;
 			cJSON_ArrayForEach(syn_src, cJSON_GetArrayItem(syn_dest, 1)) {
-				append_string(syn_str, "%s, ",
-						syn_src->valuestring);
-
+				printf("%s", syn_src->valuestring);
+				printf(", ");
 			}
-			/* replace ',' with '.' at very end */
-			syn_str->value[syn_str->length -2] = '.';
 		}
-		append_string(syn_str, "\n");
+		putchar('\n');
 	}
 
-	/* get examples */
-	int max		    = example_max_line;
-	String *example_str = new_string();
-	cJSON *example	    = cJSON_GetArrayItem(parser, 13);
+	/* examples */
+	char *example_str;
+	int max = example_max_line;
+	cJSON *example = cJSON_GetArrayItem(parser, 13);
 
-	if (example_str == NULL)
-		die("full_mode(): example_str");
-
-	if (!cJSON_IsNull(example)) {
-		append_string(example_str, "\n\n%s\n",
-				"------------------------------------");
-		cJSON_ArrayForEach(iterator, example ) {
+	if (!cJSON_IsNull(example) && cJSON_IsArray(example)) {
+		printf("\n\n%s\n", "------------------------");
+		cJSON_ArrayForEach(iterator, example) {
 			cJSON *example_val;
 			cJSON_ArrayForEach(example_val, iterator) {
 				if (max == 0)
 					break;
-				append_string(example_str, "\"%s\"\n",
-						example_val->child->valuestring);
+				example_str = example_val->child->valuestring;
+				printf("%s\n", trim_tag(example_str, 'b'));
 				max--;
 			}
 		}
-		trim_tag(example_str, 'b');
-		append_string(example_str, "%s\n",
-				"------------------------------------");
 	}
-	
-	/* output */
-	/* print to stdout */
-	fprintf(stdout, "%s"             /* correction        */
-			"\"%s\""         /* source text       */
-			"%s"             /* spelling (source) */
-			"%s"             /* new line          */
-			"%s"             /* dest text         */
-			"%s"             /* spelling (dest)   */
-			"%s"             /* new line          */
-			"%s" WHITE_BOLD_E " -> " END_E WHITE_BOLD_E "[%s]:" END_E 
-			" %s"            /* language          */
-			"%s"             /* new line          */
-			"%s"             /* synonyms          */
-			"%s"             /* examples          */
-			,
-
-			correct_str->value,
-			trans_src->value,
-			spell_str_src->value,
-			"\n\n",
-			trans_dest->value,
-			spell_str_dest->value,
-			"\n",
-			lang_str->value, tr->dest, get_lang(tr->dest),
-			"\n",
-			syn_str->value,
-			example_str->value
-	       );
-
-
-	free_string(trans_src);
-	free_string(trans_dest);
-	free_string(spell_str_dest);
-	free_string(spell_str_src);
-	free_string(lang_str);
-	free_string(syn_str);
-	free_string(correct_str);
-	free_string(example_str);
 
 	free_string(url);
 	free_string(req_str);

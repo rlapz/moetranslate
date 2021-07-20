@@ -41,11 +41,11 @@ rtrim(char *str)
 }
 
 /* trim html tag ( <b>...</b> ) */
-void
-trim_tag(String *dest, char tag)
+char *
+trim_tag(char *dest, char tag)
 {
 #define B_SIZE 1024
-	char *p	= dest->value;
+	char *p	= dest;
 	char tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
@@ -67,8 +67,8 @@ trim_tag(String *dest, char tag)
 	}
 	strncpy(p, tmp, j);
 	p[j] = '\0';
-	/* don't forget to update string length */
-	dest->length = j;
+
+	return p;
 }
 
 int
