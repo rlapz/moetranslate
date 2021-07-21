@@ -7,7 +7,8 @@
 
 #define DEBUG 0
 
-static const int example_max_line	= 5;	/* example lines */
+static const int example_max_line	= -1;	/* example lines, -1 = show all*/
+static const int synonym_max_line	= -1;	/* synonym lines, -1 = show all */
 static const long timeout		= 10L;	/* set request timeout (10s) */
 static const char user_agent[]		= "libcurl-agent/1.0";
 static const Url url_google = {
