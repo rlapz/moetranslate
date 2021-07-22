@@ -515,7 +515,7 @@ main(int argc, char *argv[])
 
 	t.src    = src;
 	t.target = target;
-	t.text	 = argv[3];
+	t.text	 = rtrim(ltrim(argv[3]));
 	get_result();
 
 	return EXIT_SUCCESS;
