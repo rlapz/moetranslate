@@ -10,7 +10,7 @@
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
 
 typedef struct {
-	char *value;
+	char   *value;
 	size_t length;
 } String;
 
@@ -19,10 +19,10 @@ void die(const char *fmt, ...);
 
 char *ltrim(const char *str);
 char *rtrim(char *str);
-char *trim_tag(char *str, char tag);
+void trim_tag(String *det, char tag);
 
-int append_string(String *dest, const char *fmt, ...);
-void free_string(String *dest);
+int    append_string(String *dest, const char *fmt, ...);
+void   free_string(String *dest);
 String *new_string(void);
 
 

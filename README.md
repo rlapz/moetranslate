@@ -29,10 +29,11 @@ sudo make uninstall
 ## How to Use:
 
 ```
-moetranslate [-b/-f/-h] [SOURCE] [TARGET] [TEXT]
+moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]
 
--b = Brief Mode (only show simple output).
--f = Full Mode.
+-b = Brief mode (only show simple output).
+-f = Full mode.
+-d = Detect language
 -h = Show help message.
 ```
 

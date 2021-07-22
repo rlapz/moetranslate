@@ -41,12 +41,12 @@ rtrim(char *str)
 }
 
 /* trim html tag ( <b>...</b> ) */
-char *
-trim_tag(char *dest, char tag)
+void
+trim_tag(String *dest, char tag)
 {
 #define B_SIZE 1024
-	char *p	= dest;
-	char tmp[B_SIZE];
+	char   *p = dest->value;
+	char   tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
 	/* UNSAFE */
@@ -68,16 +68,17 @@ trim_tag(char *dest, char tag)
 	strncpy(p, tmp, j);
 	p[j] = '\0';
 
-	return p;
+	dest->value  = p;
+	dest->length = j;
 }
 
 int
 append_string(String *dest, const char *fmt, ...)
 {
-	int n;
+	int	n;
 	va_list v;
-	size_t len  = 0;
-	char *new_s = NULL;
+	size_t	len 	= 0;
+	char	*new_s	= NULL;
 
 	if (dest == NULL || dest->value == NULL)
 		return 0;
