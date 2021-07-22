@@ -39,12 +39,12 @@ moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]
 
 
 1. Brief mode:
-	`moetranslate -b auto id "Hello world\!"`
+	`moetranslate -b auto:id "Hello world\!"`
 
 	`auto`	-> automatic detection
 	`id`	-> Indonsian language code
 2. Full mode:
-	`moetranslate -f en id "Hello wrld\!"`
+	`moetranslate -f en:id "Hello wrld\!"`
 
 	`en`	-> English language code
 
