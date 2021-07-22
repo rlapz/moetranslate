@@ -1,6 +1,9 @@
 # moetranslate
 A simple language translator written in C
 
+
+![](screenshots/ss1.png)
+
 ## Currently Supported:
 1. Google Translate API
 
