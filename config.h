@@ -15,8 +15,8 @@ static const Url  url_google		= {
 	"https://translate.googleapis.com/translate_a/single?", /* base url */
 	{
 		[BRIEF]  = "client=gtx&ie=UTF-8&oe=UTF-8&dt=t", /* url parameter (brief) */
-		[FULL]   = "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&" /* url parameter (full) */
-			   "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca",
+		[FULL]   = "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&"
+			   "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca", /* url parameter (full) */
 		[DETECT] = "client=gtx&sl=auto"
 	}
 };

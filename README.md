@@ -45,13 +45,14 @@ moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]
 	`moetranslate -b auto:id "Hello world\!"`
 
 	`auto`	-> automatic detection
+
 	`id`	-> Indonsian language code
 2. Full mode:
 	`moetranslate -f en:id "Hello wrld\!"`
 
 	`en`	-> English language code
 
-	Will show translated WORD/SENTENCE with	more information.
+	Will show translated WORD/SENTENCE with more information.
 3. Show help:
 	`moetranslate -h`
 
