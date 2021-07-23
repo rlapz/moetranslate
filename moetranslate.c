@@ -51,19 +51,18 @@ typedef struct {
 /* function declaration */
 static void     brief_mode(const cJSON *result);
 static void     detect_lang(const cJSON *result);
-static void     full_mode(const cJSON *result);
+static void     full_mode(const Translate *tr, const cJSON *result);
 static char    *get_lang(const char *lcode);
-static void     get_result(void);
+static void     get_result(const Translate *tr);
 static void     help(FILE *out);
 static char    *request_handler(CURL *curl, const String *url);
-static String  *url_parser(CURL *curl);
+static String  *url_parser(const Translate *tr, CURL *curl);
 static size_t   write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
 /* global vars */
-static const Translate *tr;
 
 /* function implementations */
 static void
@@ -94,13 +93,12 @@ detect_lang(const cJSON *result)
 }
 
 static void
-full_mode(const cJSON *result)
+full_mode(const Translate *tr, const cJSON *result)
 {
 	cJSON *i; /* iterator  */
 
 	/* source text */
 	printf("\"%s\"\n", tr->text);
-
 
 	/* get correction */
 	cJSON *correction = cJSON_GetArrayItem(result, 7);
@@ -137,14 +135,13 @@ full_mode(const cJSON *result)
 
 
 	/* target text */
-	cJSON *trans = result->child;
-	cJSON *trans_val;
+	cJSON *target = result->child;
+	cJSON *target_val;
 
-	cJSON_ArrayForEach(i, trans) {
-		trans_val = i->child;
-		if (cJSON_IsString(trans_val)) {
-			printf(WHITE_BOLD_E "%s" END_E, trans_val->valuestring);
-		}
+	cJSON_ArrayForEach(i, target) {
+		target_val = i->child;
+		if (cJSON_IsString(target_val))
+			printf(WHITE_BOLD_E "%s" END_E, target_val->valuestring);
 	}
 	putchar('\n');
 
@@ -169,7 +166,7 @@ full_mode(const cJSON *result)
 	      *syn_target;
 
 	if (cJSON_IsArray(synonym))
-		printf("\n%s", "~~~~~~~~~~~~~~~~~~~~~~~~");
+		printf("\n%s", "------------------------");
 
 	cJSON_ArrayForEach(i, synonym) {
 		int max_syn = synonym_max_line;
@@ -213,7 +210,7 @@ full_mode(const cJSON *result)
 	      *example_exp;
 
 	if (cJSON_IsArray(example))
-		printf("\n\n%s", "~~~~~~~~~~~~~~~~~~~~~~~~");
+		printf("\n\n%s", "------------------------");
 
 	cJSON_ArrayForEach(i, example) {
 		cJSON *example_label = i->child;
@@ -249,7 +246,7 @@ full_mode(const cJSON *result)
 	cJSON *more_example_val;
 
 	if (cJSON_IsArray(more_example)) {
-		printf("\n\n%s\n", "~~~~~~~~~~~~~~~~~~~~~~~~");
+		printf("\n\n%s\n", "------------------------");
 
 		/* because *result has const attribute */
 		String *example_str = new_string();
@@ -290,7 +287,7 @@ get_lang(const char *lcode)
 }
 
 static void
-get_result(void)
+get_result(const Translate *tr)
 {
 	CURL   *curl;
 	char   *req_str;
@@ -301,7 +298,7 @@ get_result(void)
 	if (curl == NULL)
 		die("get_result(): curl_easy_init()");
 
-	url	= url_parser(curl);
+	url	= url_parser(tr, curl);
 	req_str	= request_handler(curl, url);
 	result	= cJSON_Parse(req_str);
 
@@ -322,7 +319,7 @@ get_result(void)
 		brief_mode(result);
 		break;
 	case FULL:
-		full_mode(result);
+		full_mode(tr, result);
 		break;
 	case DETECT:
 		detect_lang(result);
@@ -372,7 +369,7 @@ request_handler(CURL *curl, const String *url)
 }
 
 static String *
-url_parser(CURL *curl)
+url_parser(const Translate *tr, CURL *curl)
 {
 	char	*text_encode;
 	int	 a_size = 0;
@@ -398,8 +395,7 @@ url_parser(CURL *curl)
 
 	switch (tr->mode) {
 	case DETECT:
-		a_size = append_string(ret, "&q=%s",
-				text_encode);
+		a_size = append_string(ret, "&q=%s", text_encode);
 		break;
 	case BRIEF:
 		a_size = append_string(ret, "&sl=%s&tl=%s&q=%s",
@@ -500,16 +496,16 @@ main(int argc, char *argv[])
 	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);
+
 		return EXIT_SUCCESS;
 	}
 
-	Translate t = {0};
-	tr = &t;
+	Translate t;
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
 		t.text = argv[2];
-		get_result();
+		get_result(&t);
 
 		return EXIT_SUCCESS;
 	}
@@ -525,13 +521,11 @@ main(int argc, char *argv[])
 
 	if (get_lang(src) == NULL) {
 		fprintf(stderr, "Unknown \"%s\" language code\n", src);
-
 		goto err;
 	}
 
 	if (strcmp(target, "auto") == 0 || get_lang(target) == NULL) {
 		fprintf(stderr, "Unknown \"%s\" language code\n", target);
-
 		goto err;
 	}
 
@@ -540,7 +534,6 @@ main(int argc, char *argv[])
 
 	else if (strcmp(argv[1], "-f") == 0)
 		t.mode = FULL;
-
 	else
 		goto err;
 
@@ -548,7 +541,7 @@ main(int argc, char *argv[])
 	t.src    = src;
 	t.target = target;
 	t.text	 = rtrim(ltrim(argv[3]));
-	get_result();
+	get_result(&t);
 
 	return EXIT_SUCCESS;
 
