@@ -500,14 +500,12 @@ main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	Translate t;
+	Translate t = {0};
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
 		t.text = argv[2];
-		get_result(&t);
-
-		return EXIT_SUCCESS;
+		goto result;
 	}
 
 	if (argc != 4)
@@ -541,8 +539,9 @@ main(int argc, char *argv[])
 	t.src    = src;
 	t.target = target;
 	t.text	 = rtrim(ltrim(argv[3]));
-	get_result(&t);
 
+result:
+	get_result(&t);
 	return EXIT_SUCCESS;
 
 err:

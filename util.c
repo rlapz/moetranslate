@@ -119,7 +119,7 @@ free_string(String *dest)
 		return;
 
 	free(dest->value);
-	dest->value = NULL;
+	dest->value  = NULL;
 	dest->length = 0;
 
 	free(dest);
