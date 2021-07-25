@@ -504,7 +504,7 @@ main(int argc, char *argv[])
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
-		t.text = argv[2];
+		t.text = rtrim(ltrim(argv[2]));
 		goto result;
 	}
 
