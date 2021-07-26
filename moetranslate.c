@@ -102,8 +102,6 @@ full_mode(const Translate *tr, cJSON *result)
 	cJSON *i; /* iterator  */
 
 	/* Source text */
-	//printf("\"%s\"\n", tr->text);
-
 	cJSON *source = result->child;
 	cJSON *source_val;
 
@@ -113,7 +111,7 @@ full_mode(const Translate *tr, cJSON *result)
 		if (cJSON_IsString(source_val))
 			printf("%s", source_val->valuestring);
 	}
-	puts("\"\n");
+	puts("\"");
 	
 
 	/* Get correction 
@@ -379,22 +377,21 @@ get_lang(const char *lcode)
 static void
 get_result(const Translate *tr)
 {
+	char	 url[(TEXT_MAX_LEN * 3) + 150] = {0};
 	CURL	*curl;
 	cJSON	*result;
-	char	 url[(TEXT_MAX_LEN * 3) + 128];
 	Memory	 mem  = {NULL, 0};
 
 	curl = curl_easy_init();
 	if (curl == NULL)
 		die("get_result(): curl_easy_init()");
 
-
 	url_parser(url, sizeof(url), tr);
-
 	request_handler(&mem, curl, url);
 
-	result = cJSON_Parse(mem.memory);
+	puts(url);
 
+	result = cJSON_Parse(mem.memory);
 	if (result == NULL) {
 		errno = EINVAL;
 		die("get_result(): cJSON_Parse(): Parsing error!");
@@ -452,13 +449,11 @@ url_parser(char *dest, size_t len, const Translate *tr)
 		ret = snprintf(dest + ret, len, "&q=%s", text_encode);
 		break;
 	case BRIEF:
-		ret = snprintf(dest + ret, len,
-				"&sl=%s&tl=%s&q=%s",
+		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&q=%s",
 				tr->src, tr->target, text_encode);
 		break;
 	case FULL:
-		ret = snprintf(dest + ret, len,
-				"&sl=%s&tl=%s&hl=%s&q=%s",
+		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&hl=%s&q=%s",
 				tr->src, tr->target, tr->target, text_encode);
 		break;
 	default:
@@ -467,7 +462,6 @@ url_parser(char *dest, size_t len, const Translate *tr)
 
 	if (ret < 0)
 		die("url_parser(): formatting url");
-
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
@@ -527,7 +521,8 @@ main(int argc, char *argv[])
 
 	Translate t = {0};
 
-	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
+	if (argc == 3 && strcmp(argv[1], "-d") == 0 &&
+			strlen(argv[2]) < TEXT_MAX_LEN) {
 		t.mode = DETECT;
 		t.text = rtrim(ltrim(argv[2]));
 		goto result;
@@ -563,11 +558,13 @@ main(int argc, char *argv[])
 
 	t.src    = src;
 	t.target = target;
-	t.text	 = rtrim(ltrim(argv[3]));
+	t.text	 = ltrim(rtrim(argv[3]));
 
 result:
-	get_result(&t);
-	return EXIT_SUCCESS;
+	if (strlen(t.text) < TEXT_MAX_LEN) {
+		get_result(&t);
+		return EXIT_SUCCESS;
+	}
 
 err:
 	help(stderr);

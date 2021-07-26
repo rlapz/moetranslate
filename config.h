@@ -5,7 +5,7 @@
  * See LICENSE file for license details
  */
 
-#define TEXT_MAX_LEN 4096
+#define TEXT_MAX_LEN 2048
 
 static const int  example_max_line	= 5;	/* example max lines, -1 = show all*/
 static const int  synonym_max_line	= -1;	/* synonym max lines, -1 = show all */

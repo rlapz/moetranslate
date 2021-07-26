@@ -44,7 +44,7 @@ rtrim(char *str)
 void
 trim_tag(char *dest, char tag)
 {
-#define B_SIZE 1024
+#define B_SIZE 256
 	char   *p = dest;
 	char   tmp[B_SIZE];
 	size_t i = 0, j = 0;
