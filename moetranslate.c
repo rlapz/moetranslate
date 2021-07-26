@@ -32,37 +32,41 @@ enum {
 };
 
 typedef struct {
-	char   *lcode;	   /* language code    */
-	char   *lang;
+	char	*lcode;	   /* language code    */
+	char	*lang;
 } Language;
 
 typedef struct {
-	int     mode;	   /* mode translation */
-	char   *src;	   /* source language  */
-	char   *target;    /* target language  */
-	char   *text;	   /* text/words       */
+	char	*memory;
+	size_t	 size;
+} Memory;
+
+typedef struct {
+	int	 mode;	   /* mode translation */
+	char   	*src;	   /* source language  */
+	char   	*target;    /* target language  */
+	char   	*text;	   /* text/words       */
 } Translate;
 
 typedef struct {
-	char   *base_url;
-	char   *params[3]; /* url parameter (brief, full mode, detect lang) */
+	char	*base_url;
+	char   	*params[3]; /* url parameter (brief, full mode, detect lang) */
 } Url;
 
 /* function declaration */
-static void     brief_mode(const cJSON *result);
-static void     detect_lang(const cJSON *result);
-static void     full_mode(const Translate *tr, const cJSON *result);
-static char    *get_lang(const char *lcode);
-static void     get_result(const Translate *tr);
-static void     help(FILE *out);
-static char    *request_handler(CURL *curl, const String *url);
-static String  *url_parser(const Translate *tr, CURL *curl);
-static size_t   write_callback(char *ptr, size_t size, size_t nmemb, void *data);
+static void	 brief_mode(const cJSON *result);
+static void    	 detect_lang(const cJSON *result);
+static void    	 full_mode(const Translate *tr, cJSON *result);
+static char    	*get_lang(const char *lcode);
+static void    	 get_result(const Translate *tr);
+static void    	 help(FILE *out);
+static void    	 request_handler(Memory *dest, CURL *curl, const char *url);
+static void	 url_parser(char *dest, size_t len, const Translate *tr);
+static size_t  	 write_callback(char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
-/* global vars */
 
 /* function implementations */
 static void
@@ -93,14 +97,35 @@ detect_lang(const cJSON *result)
 }
 
 static void
-full_mode(const Translate *tr, const cJSON *result)
+full_mode(const Translate *tr, cJSON *result)
 {
 	cJSON *i; /* iterator  */
 
-	/* source text */
-	printf("\"%s\"\n", tr->text);
+	/* Source text */
+	//printf("\"%s\"\n", tr->text);
 
-	/* get correction */
+	cJSON *source = result->child;
+	cJSON *source_val;
+
+	putchar('"');
+	cJSON_ArrayForEach(i, source) {
+		source_val = i->child->next;
+		if (cJSON_IsString(source_val))
+			printf("%s", source_val->valuestring);
+	}
+	puts("\"\n");
+	
+
+	/* Get correction 
+	 *
+	 * Did you mean: " text " ?
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 *
+	 * Did you mean: "behind me" ?
+	 */
 	cJSON *correction = cJSON_GetArrayItem(result, 7);
 
 	if (cJSON_IsString(correction->child) &&
@@ -111,12 +136,21 @@ full_mode(const Translate *tr, const cJSON *result)
 	}
 
 
-	/* get spelling array index */
+	/* Get spelling array index */
 	cJSON *spelling = cJSON_GetArrayItem(result->child, 
 				cJSON_GetArraySize(result->child) -1);
 
 
-	/* source spelling */
+	/* Source spelling 
+	 *
+	 * ( spelling )
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 *
+	 * ( həˈlō )
+	 */
 	cJSON *spelling_src = cJSON_GetArrayItem(spelling, 3);
 
 	if (cJSON_IsString(spelling_src)) {
@@ -124,7 +158,16 @@ full_mode(const Translate *tr, const cJSON *result)
 	}
 
 
-	/* source lang */
+	/* Source lang
+	 *
+	 * [ language code ]: language
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 *
+	 * [en]: English
+	 */
 	cJSON *lang_src = cJSON_GetArrayItem(result, 2);
 
 	if (cJSON_IsString(lang_src)) {
@@ -134,7 +177,7 @@ full_mode(const Translate *tr, const cJSON *result)
 	}
 
 
-	/* target text */
+	/* Target text */
 	cJSON *target = result->child;
 	cJSON *target_val;
 
@@ -146,7 +189,16 @@ full_mode(const Translate *tr, const cJSON *result)
 	putchar('\n');
 
 
-	/* target spelling */
+	/* Target spelling 
+	 *
+	 * ( spelling )
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 *
+	 * ( həˈlō )
+	 */
 	cJSON *spelling_target = cJSON_GetArrayItem(spelling, 2);
 
 	if (cJSON_IsString(spelling_target)) {
@@ -154,12 +206,37 @@ full_mode(const Translate *tr, const cJSON *result)
 	}
 
 
-	/* target lang*/
+	/* Target lang
+	 *
+	 * [ language code ]: language
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 *
+	 * [id]: Indonesian
+	 */
 	printf( GREEN_E "[ %s ]:" END_E " %s\n",
 			tr->target, get_lang(tr->target));
 
 
-	/* synonyms */
+	/* Synonyms 
+	 *
+	 * [ label ] (depends on target language)
+	 *   target word alternative:
+	 *         -> list alternative words
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 * NOTE: verba = verb
+	 *
+	 * [Verba]
+	 *   Halo!:
+	 *         -> Hello!
+	 *   Salam!:
+	 *         -> Hallo!, Holla!, Hello!
+	 */
 	cJSON *synonym = cJSON_GetArrayItem(result, 1);
 	cJSON *syn_label,
 	      *syn_src,
@@ -202,7 +279,25 @@ full_mode(const Translate *tr, const cJSON *result)
 	}
 
 
-	/* examples */
+	/* Examples 
+	 *
+	 * [ label ] (depends on target language)
+	 *   explainations
+	 *      -> examples
+	 *
+	 *------------------------------------
+	 * Example:
+	 *------------------------------------
+	 * NOTE: kata seru = interjection, nomina = noun
+	 *
+	 * [ Kata seru ]
+         *   used as a greeting or to begin a phone conversation.
+	 *      -> hello there, Katie!
+	 *
+	 * [ Nomina ]
+	 *   an utterance of “hello”; a greeting.
+	 *      -> she was getting polite nods and hellos from people
+	 */
 	cJSON *example = cJSON_GetArrayItem(result, 12);
 	cJSON *example_sub,
 	      *example_desc,
@@ -240,17 +335,15 @@ full_mode(const Translate *tr, const cJSON *result)
 		putchar('\n');
 	}
 
-	/* more examples */
+	/* More examples */
 	cJSON *more_example = cJSON_GetArrayItem(result, 13);
-	cJSON *more_example_a;
-	cJSON *more_example_val;
+	cJSON *more_example_a,
+	      *more_example_val;
 
 	if (cJSON_IsArray(more_example)) {
 		printf("\n\n%s\n", "------------------------");
 
-		/* because *result has const attribute */
-		String *example_str = new_string();
-		int    example_max  = example_max_line;
+		int example_max = example_max_line;
 
 		cJSON_ArrayForEach(i, more_example) {
 			cJSON_ArrayForEach(more_example_a, i) {
@@ -261,16 +354,13 @@ full_mode(const Translate *tr, const cJSON *result)
 				if (example_max > 0)
 					example_max--;
 
-				append_string(example_str,
-						"\"" YELLOW_E "%s" END_E "\"\n", 
+				/* eliminating <b> ... </b> tags */
+				trim_tag(more_example_val->valuestring, 'b');
+				printf("\"" YELLOW_E "%s" END_E "\"\n",
 						more_example_val->valuestring);
 			}
 		}
-		/* eliminating <b> ... </b> tags */
-		trim_tag(example_str, 'b');
-		printf("%s\n", example_str->value);
-
-		free_string(example_str);
+		putchar('\n');
 	}
 }
 
@@ -289,25 +379,21 @@ get_lang(const char *lcode)
 static void
 get_result(const Translate *tr)
 {
-	CURL   *curl;
-	char   *req_str;
-	cJSON  *result;
-	String *url;
+	CURL	*curl;
+	cJSON	*result;
+	char	 url[(TEXT_MAX_LEN * 3) + 128];
+	Memory	 mem  = {NULL, 0};
 
 	curl = curl_easy_init();
 	if (curl == NULL)
 		die("get_result(): curl_easy_init()");
 
-	url	= url_parser(tr, curl);
-	req_str	= request_handler(curl, url);
-	result	= cJSON_Parse(req_str);
 
-#if DEBUG 
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" get_result()      : content                 :"
-			"\n       %s\n\n",
-			cJSON_Print(result));
-#endif
+	url_parser(url, sizeof(url), tr);
+
+	request_handler(&mem, curl, url);
+
+	result = cJSON_Parse(mem.memory);
 
 	if (result == NULL) {
 		errno = EINVAL;
@@ -326,104 +412,62 @@ get_result(const Translate *tr)
 		break;
 	}
 
-	free(req_str);
-	free_string(url);
+	mem.size = 0;
+	free(mem.memory);
 	cJSON_Delete(result);
 	curl_easy_cleanup(curl);
 }
 
-static char *
-request_handler(CURL *curl, const String *url)
+static void
+request_handler(Memory *dest, CURL *curl, const char *url)
 {
 	CURLcode ccode;
-	String   ret = {NULL, 0};
 
-	if ((ret.value = malloc(1)) == NULL)
-		die("request_handler(): malloc");
-
-	/* set url */
-	curl_easy_setopt(curl, CURLOPT_URL,           url->value    );
-	/* set write function helper */
+	curl_easy_setopt(curl, CURLOPT_URL,           url	    );
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	/* write data to memory */
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA,     (void*)&ret   );
-	/* set user-agent */
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA,     (void*)dest   );
 	curl_easy_setopt(curl, CURLOPT_USERAGENT,     user_agent    );
-	/* set timeout */
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       timeout       );
 
-	/* sending request */
 	if ((ccode = curl_easy_perform(curl)) != CURLE_OK)
 		die("request_handler(): %s", curl_easy_strerror(ccode));
-
-#if DEBUG
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" request_handler() : request length          : %zu\n",
-		        url->length);
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" request_handler() : content length(total)   : %zu\n",
-			ret.length);
-#endif
-
-	return ret.value;
 }
 
-static String *
-url_parser(const Translate *tr, CURL *curl)
+static void
+url_parser(char *dest, size_t len, const Translate *tr)
 {
-	char	*text_encode;
-	int	 a_size = 0;
-	String	*ret	= NULL;
+	int   ret;
+	char  text_encode[TEXT_MAX_LEN * 3];
 
-	if (tr == NULL)
-		die("url_parser(): tr");
+	url_encode(text_encode, tr->text, sizeof(text_encode));
 
-	if ((ret = new_string()) == NULL)
-		die("url_parser(): ret");
+	ret = snprintf(dest, len, "%s%s",
+			url_google.base_url, url_google.params[tr->mode]);
 
-	text_encode = curl_easy_escape(curl, tr->text, (int)strlen(tr->text));
-	if (text_encode == NULL)
-		die("url_parser(): curl_easy_escape()");
-
-	a_size = append_string(ret, "%s%s",
-				 url_google.base_url,
-				 url_google.params[tr->mode]);
-
-	if (a_size == 0)
-		die("url_parser(): append_string");
-
+	if (ret < 0)
+		die("url_parser(): formatting url");
 
 	switch (tr->mode) {
 	case DETECT:
-		a_size = append_string(ret, "&q=%s", text_encode);
+		ret = snprintf(dest + ret, len, "&q=%s", text_encode);
 		break;
 	case BRIEF:
-		a_size = append_string(ret, "&sl=%s&tl=%s&q=%s",
+		ret = snprintf(dest + ret, len,
+				"&sl=%s&tl=%s&q=%s",
 				tr->src, tr->target, text_encode);
 		break;
 	case FULL:
-		a_size = append_string(ret, "&sl=%s&tl=%s&hl=%s&q=%s",
+		ret = snprintf(dest + ret, len,
+				"&sl=%s&tl=%s&hl=%s&q=%s",
 				tr->src, tr->target, tr->target, text_encode);
 		break;
 	default:
-		die("url_parser(): select mode");
+		die("url_parser(): mode is invalid");
 	}
 
-	if (a_size == 0)
-		die("url_parser(): append_string");
+	if (ret < 0)
+		die("url_parser(): formatting url");
 
-#if DEBUG
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" url_parser()      : request length(total)   : %d\n",
-			ret_size);
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" url_parser()      : request url             :\n       %s\n\n",
-			ret->value);
-#endif
-
-	curl_free(text_encode);
-
-	return ret;
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
@@ -431,33 +475,18 @@ static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
 	char   *ptr;
-	String *str	= (String*)data;
-	size_t realsize = (size * nmemb);
+	Memory *mem	   = (Memory *)data;
+	size_t	realsize   = (size * nmemb);
 
-#if DEBUG
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" write_callback()  : content length          : %zu\n",
-			str->length);
-#endif
-
-	ptr = realloc(str->value, str->length + realsize +1);
+	ptr = realloc(mem->memory, mem->size + realsize +1);
        	if (ptr == NULL)
 		die("write_callback(): realloc");
 
-	memcpy(ptr + str->length, contents, realsize);
+	memcpy(ptr + mem->size, contents, realsize);
 
-	str->value               = ptr;
-	str->length             += realsize;
-	str->value[str->length]  = '\0';
-
-#if DEBUG
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" write_callback()  : content length(real)    : %zu\n",
-			realsize);
-	printf(GREEN_BOLD_E "DEBUG:" END_E 
-			" write_callback()  : appended content length : %zu\n",
-			str->length);
-#endif
+	mem->memory	       = ptr;
+	mem->size             += realsize;
+	mem->memory[mem->size] = '\0';
 
 	return realsize;
 }
@@ -481,7 +510,7 @@ help(FILE *out)
 			"   Full Mode   :  moetranslate -f id:en \"Halo\"\n"
 			"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
 			"   Detect Lang :  moetranslate -d \"你好\"\n"
-	       );
+	);
 
 }
 
@@ -489,10 +518,6 @@ help(FILE *out)
 int
 main(int argc, char *argv[])
 {
-#if DEBUG
-	printf(GREEN_BOLD_E "[DEBUG Mode]" END_E "\n");
-#endif
-
 	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);

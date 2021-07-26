@@ -17,13 +17,9 @@ typedef struct {
 
 void die(const char *fmt, ...);
 
-char *ltrim(const char *str);
-char *rtrim(char *str);
-void trim_tag(String *det, char tag);
-
-int    append_string(String *dest, const char *fmt, ...);
-void   free_string(String *dest);
-String *new_string(void);
-
+char	*ltrim(const char *str);
+char 	*rtrim(char *str);
+void 	 trim_tag(char *dest, char tag);
+char	*url_encode(char *dest, const char *src, size_t len);
 
 #endif
