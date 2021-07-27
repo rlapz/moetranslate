@@ -436,7 +436,7 @@ url_parser(char *dest, size_t len, const Translate *tr)
 	int   ret;
 	char  text_encode[TEXT_MAX_LEN * 3];
 
-	url_encode(text_encode, tr->text, sizeof(text_encode));
+	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
 
 	ret = snprintf(dest, len, "%s%s",
 			url_google.base_url, url_google.params[tr->mode]);

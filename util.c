@@ -70,11 +70,13 @@ trim_tag(char *dest, char tag)
 }
 
 char *
-url_encode(char *dest, const char *src, size_t len)
+url_encode(char *dest, const unsigned char *src, size_t len)
 {
 	const char *hex = "0123456789abcdef";
 	size_t	    i  	= 0;
 	size_t	    pos	= 0;
+
+	printf("%d\n", src[0]);
 
 	while (src[i] != '\0' && i < len) {
 		if (isalnum(src[i])) {
