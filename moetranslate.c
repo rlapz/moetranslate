@@ -389,8 +389,6 @@ get_result(const Translate *tr)
 	url_parser(url, sizeof(url), tr);
 	request_handler(&mem, curl, url);
 
-	puts(url);
-
 	result = cJSON_Parse(mem.memory);
 	if (result == NULL) {
 		errno = EINVAL;

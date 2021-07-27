@@ -76,8 +76,6 @@ url_encode(char *dest, const unsigned char *src, size_t len)
 	size_t	    i  	= 0;
 	size_t	    pos	= 0;
 
-	printf("%d\n", src[0]);
-
 	while (src[i] != '\0' && i < len) {
 		if (isalnum(src[i])) {
 			dest[pos++] = src[i];
