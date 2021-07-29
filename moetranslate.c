@@ -44,7 +44,7 @@ typedef struct {
 typedef struct {
 	int	 mode;	   /* mode translation */
 	char   	*src;	   /* source language  */
-	char   	*target;    /* target language  */
+	char   	*target;   /* target language  */
 	char   	*text;	   /* text/words       */
 } Translate;
 
@@ -54,15 +54,15 @@ typedef struct {
 } Url;
 
 /* function declaration */
-static void	 brief_mode(const cJSON *result);
-static void    	 detect_lang(const cJSON *result);
-static void    	 full_mode(const Translate *tr, cJSON *result);
-static char    	*get_lang(const char *lcode);
-static void    	 get_result(const Translate *tr);
-static void    	 help(FILE *out);
-static void    	 request_handler(Memory *dest, CURL *curl, const char *url);
-static void	 url_parser(char *dest, size_t len, const Translate *tr);
-static size_t  	 write_callback(char *ptr, size_t size, size_t nmemb, void *data);
+static void	 brief_mode	 (const cJSON *result);
+static void    	 detect_lang	 (const cJSON *result);
+static void    	 full_mode	 (const Translate *tr, cJSON *result);
+static char    	*get_lang	 (const char *lcode);
+static void    	 get_result	 (const Translate *tr);
+static void    	 help		 (FILE *out);
+static void	 request_handler (Memory *dest, CURL *curl, const char *url);
+static char 	*url_parser	 (char *dest, size_t len, const Translate *tr);
+static size_t  	 write_callback	 (char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
@@ -407,7 +407,6 @@ get_result(const Translate *tr)
 		break;
 	}
 
-	mem.size = 0;
 	free(mem.memory);
 	cJSON_Delete(result);
 	curl_easy_cleanup(curl);
@@ -424,11 +423,12 @@ request_handler(Memory *dest, CURL *curl, const char *url)
 	curl_easy_setopt(curl, CURLOPT_USERAGENT,     user_agent    );
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       timeout       );
 
-	if ((ccode = curl_easy_perform(curl)) != CURLE_OK)
+	ccode = curl_easy_perform(curl);
+	if (ccode != CURLE_OK)
 		die("request_handler(): %s", curl_easy_strerror(ccode));
 }
 
-static void
+static char *
 url_parser(char *dest, size_t len, const Translate *tr)
 {
 	int   ret;
@@ -460,6 +460,8 @@ url_parser(char *dest, size_t len, const Translate *tr)
 
 	if (ret < 0)
 		die("url_parser(): formatting url");
+
+	return dest;
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
@@ -513,14 +515,12 @@ main(int argc, char *argv[])
 	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);
-
 		return EXIT_SUCCESS;
 	}
 
-	Translate t = {0};
+	Translate t = {0, NULL, NULL, NULL};
 
-	if (argc == 3 && strcmp(argv[1], "-d") == 0 &&
-			strlen(argv[2]) < TEXT_MAX_LEN) {
+	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
 		t.text = rtrim(ltrim(argv[2]));
 		goto result;
@@ -559,10 +559,14 @@ main(int argc, char *argv[])
 	t.text	 = ltrim(rtrim(argv[3]));
 
 result:
-	if (strlen(t.text) < TEXT_MAX_LEN) {
-		get_result(&t);
-		return EXIT_SUCCESS;
+	if (strlen(t.text) >= TEXT_MAX_LEN) {
+		fprintf(stderr, "Text too long, MAX length: %d characters\n",
+				TEXT_MAX_LEN);
+		goto err;
 	}
+
+	get_result(&t);
+	return EXIT_SUCCESS;
 
 err:
 	help(stderr);
