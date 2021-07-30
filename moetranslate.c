@@ -55,14 +55,14 @@ typedef struct {
 
 /* function declaration */
 static void	 brief_mode	 (const cJSON *result);
-static void    	 detect_lang	 (const cJSON *result);
-static void    	 full_mode	 (const Translate *tr, cJSON *result);
-static char    	*get_lang	 (const char *lcode);
-static void    	 get_result	 (const Translate *tr);
-static void    	 help		 (FILE *out);
+static void	 detect_lang	 (const cJSON *result);
+static void	 full_mode	 (const Translate *tr, cJSON *result);
+static char	*get_lang	 (const char *lcode);
+static void	 get_result	 (const Translate *tr);
+static void	 help		 (FILE *out);
 static void	 request_handler (Memory *dest, CURL *curl, const char *url);
-static char 	*url_parser	 (char *dest, size_t len, const Translate *tr);
-static size_t  	 write_callback	 (char *ptr, size_t size, size_t nmemb, void *data);
+static char	*url_parser	 (char *dest, size_t len, const Translate *tr);
+static size_t	 write_callback	 (char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
@@ -380,7 +380,7 @@ get_result(const Translate *tr)
 	char	 url[(TEXT_MAX_LEN * 3) + 150] = {0};
 	CURL	*curl;
 	cJSON	*result;
-	Memory	 mem  = {NULL, 0};
+	Memory	 mem = {NULL, 0};
 
 	curl = curl_easy_init();
 	if (curl == NULL)
@@ -417,11 +417,11 @@ request_handler(Memory *dest, CURL *curl, const char *url)
 {
 	CURLcode ccode;
 
-	curl_easy_setopt(curl, CURLOPT_URL,           url	    );
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA,     (void*)dest   );
-	curl_easy_setopt(curl, CURLOPT_USERAGENT,     user_agent    );
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       timeout       );
+	curl_easy_setopt(curl, CURLOPT_URL,		url		);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,	write_callback	);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA,	(void*)dest	);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT,	user_agent	);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT,		timeout		);
 
 	ccode = curl_easy_perform(curl);
 	if (ccode != CURLE_OK)
@@ -431,8 +431,8 @@ request_handler(Memory *dest, CURL *curl, const char *url)
 static char *
 url_parser(char *dest, size_t len, const Translate *tr)
 {
-	int   ret;
-	char  text_encode[TEXT_MAX_LEN * 3];
+	int  ret;
+	char text_encode[TEXT_MAX_LEN * 3];
 
 	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
 
@@ -469,8 +469,8 @@ static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
 	char   *ptr;
-	Memory *mem	   = (Memory *)data;
-	size_t	realsize   = (size * nmemb);
+	Memory *mem	 = (Memory *)data;
+	size_t	realsize = (size * nmemb);
 
 	ptr = realloc(mem->memory, mem->size + realsize +1);
        	if (ptr == NULL)
@@ -478,9 +478,9 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 
 	memcpy(ptr + mem->size, contents, realsize);
 
-	mem->memory	       = ptr;
-	mem->size             += realsize;
-	mem->memory[mem->size] = '\0';
+	mem->memory		 = ptr;
+	mem->size		+= realsize;
+	mem->memory[mem->size]	 = '\0';
 
 	return realsize;
 }
@@ -493,17 +493,18 @@ help(FILE *out)
 		perror(NULL);
 	}
 
-	fprintf(out, "moetranslate - A simple language translator\n\n"
-			"Usage: moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
-			"       -b         Brief mode\n"
-			"       -f         Full mode\n"
-			"       -d         Detect language\n"
-			"       -h         Show this help\n\n"
-			"Examples:\n"
-			"   Brief Mode  :  moetranslate -b en:id \"Hello\"\n"
-			"   Full Mode   :  moetranslate -f id:en \"Halo\"\n"
-			"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
-			"   Detect Lang :  moetranslate -d \"你好\"\n"
+	fprintf(out,
+		"moetranslate - A simple language translator\n\n"
+		"Usage: moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
+		"       -b         Brief mode\n"
+		"       -f         Full mode\n"
+		"       -d         Detect language\n"
+		"       -h         Show this help\n\n"
+		"Examples:\n"
+		"   Brief Mode  :  moetranslate -b en:id \"Hello\"\n"
+		"   Full Mode   :  moetranslate -f id:en \"Halo\"\n"
+		"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
+		"   Detect Lang :  moetranslate -d \"你好\"\n"
 	);
 
 }
