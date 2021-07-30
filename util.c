@@ -42,10 +42,10 @@ rtrim(char *str)
 
 /* trim html tag ( <b>...</b> ) */
 void
-trim_tag(String *dest, char tag)
+trim_tag(char *dest, char tag)
 {
-#define B_SIZE 1024
-	char   *p = dest->value;
+#define B_SIZE 256
+	char   *p = dest;
 	char   tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
@@ -67,82 +67,26 @@ trim_tag(String *dest, char tag)
 	}
 	strncpy(p, tmp, j);
 	p[j] = '\0';
-
-	dest->value  = p;
-	dest->length = j;
 }
 
-int
-append_string(String *dest, const char *fmt, ...)
+char *
+url_encode(char *dest, const unsigned char *src, size_t len)
 {
-	int	n;
-	va_list v;
-	size_t	len 	= 0;
-	char	*new_s	= NULL;
+	const char *hex = "0123456789abcdef";
+	size_t	    i  	= 0;
+	size_t	    pos	= 0;
 
-	if (dest == NULL || dest->value == NULL)
-		return 0;
-
-	/* determine required size */
-	va_start(v, fmt);
-	n = vsnprintf(new_s, len, fmt, v);
-	va_end(v);
-
-	if (n < 0)
-		return 0;
-
-	len	= (size_t)n;
-	new_s	= realloc(dest->value, len + dest->length +1);
-	if (new_s == NULL)
-		return 0;
-
-	va_start(v, fmt);
-	n = vsnprintf(new_s + dest->length, len +1, fmt, v);
-	va_end(v);
-
-	if (n < 0)
-		return 0;
-
-	dest->value   = new_s; 
-	dest->length += (size_t)len;
-
-	return n;
-}
-
-void
-free_string(String *dest)
-{
-	if (dest == NULL)
-		return;
-
-	if (dest->value == NULL)
-		return;
-
-	free(dest->value);
-	dest->value  = NULL;
-	dest->length = 0;
-
-	free(dest);
-	dest = NULL;
-}
-
-String *
-new_string(void)
-{
-	char *value = calloc(1, 1);
-	if (value == NULL)
-		return NULL;
-
-	String *str = malloc(sizeof(String));
-	if (str == NULL) {
-		free(value);
-		value = NULL;
-		return NULL;
+	while (src[i] != '\0' && i < len) {
+		if (isalnum(src[i])) {
+			dest[pos++] = src[i];
+		} else {
+			dest[pos++] = '%';
+			dest[pos++] = hex[src[i] >> 0x4];
+			dest[pos++] = hex[src[i] & 0xf];
+		}
+		i++;
 	}
+	dest[pos] = '\0';
 
-	str->value  = value;
-	str->length = 0;
-
-	return str;
+	return dest;
 }
-
