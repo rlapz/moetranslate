@@ -9,17 +9,10 @@
 
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
 
-typedef struct {
-	char   *value;
-	size_t length;
-} String;
-
-
-void die(const char *fmt, ...);
-
-char	*ltrim(const char *str);
-char 	*rtrim(char *str);
-void 	 trim_tag(char *dest, char tag);
-char	*url_encode(char *dest, const unsigned char *src, size_t len);
+void	 die		(const char *fmt, ...	);
+char	*ltrim		(const char *str	);
+char 	*rtrim		(char *str		);
+void 	 trim_tag	(char *dest, char tag	);
+char	*url_encode	(char *dest, const unsigned char *src, size_t len);
 
 #endif
