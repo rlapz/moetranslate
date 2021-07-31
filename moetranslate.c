@@ -99,264 +99,225 @@ detect_lang(const cJSON *result)
 static void
 full_mode(const Translate *tr, cJSON *result)
 {
+	/*
+	   source text 
+	  	|
+	   correction
+	  	|
+	 source spelling
+	  	|
+	   source lang
+	  	|
+	   target text
+	  	|
+	  target speling
+	  	|
+	   target lang
+	  	|
+	    synonyms
+	  	|
+	   definitions
+	  	|
+	    examples
+	 */
+
 	cJSON *i; /* iterator  */
+	cJSON *trans_text	= result->child;
 
-	/* Source text */
-	cJSON *source = result->child;
-	cJSON *source_val;
+	cJSON *examples		= cJSON_GetArrayItem(result, 13);
+	cJSON *definitions	= cJSON_GetArrayItem(result, 12);
+	cJSON *spelling		= cJSON_GetArrayItem(trans_text,
+					cJSON_GetArraySize(trans_text) -1);
+	cJSON *src_correction	= cJSON_GetArrayItem(result, 7);
+	cJSON *src_lang		= cJSON_GetArrayItem(result, 2);
+	cJSON *synonyms		= cJSON_GetArrayItem(result, 1);
 
+	cJSON *src_spelling	= cJSON_GetArrayItem(spelling, 3);
+	cJSON *tgt_spelling	= cJSON_GetArrayItem(spelling, 2);
+
+
+	cJSON *src_text_val;
+	cJSON *src_syn, *tgt_syn;		/* synonyms	*/
+	cJSON *def_sub, *def_val, *def_oth;	/* definitions	*/
+	cJSON *expl_val;			/* examples	*/
+
+
+	/* source text */
 	putchar('"');
-	cJSON_ArrayForEach(i, source) {
-		source_val = i->child->next;
-		if (cJSON_IsString(source_val))
-			printf("%s", source_val->valuestring);
+	cJSON_ArrayForEach(i, trans_text) {
+		src_text_val = i->child->next;
+		if (cJSON_IsString(src_text_val))
+			printf("%s", src_text_val->valuestring);
 	}
 	puts("\"");
-	
 
-	/* Get correction 
-	 *
-	 * Did you mean: " text " ?
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 *
-	 * Did you mean: "behind me" ?
-	 */
-	cJSON *correction = cJSON_GetArrayItem(result, 7);
-
-	if (cJSON_IsString(correction->child) &&
-			cJSON_IsString(correction->child->next)) {
+	/* correction */
+	if (cJSON_IsString(src_correction->child)) {
 		printf("\n" YELLOW_BOLD_E "Did you mean: " END_E
-				"\"%s\"" YELLOW_BOLD_E " ?\n\n" END_E,
-				correction->child->next->valuestring);
+			"\"%s\"" YELLOW_BOLD_E " ?\n\n" END_E,
+			src_correction->child->next->valuestring);
+	}
+
+	/* source spelling */
+	if (cJSON_IsString(src_spelling)) {
+		printf("( " YELLOW_E "%s" END_E " )\n",
+				src_spelling->valuestring);
 	}
 
 
-	/* Get spelling array index */
-	cJSON *spelling = cJSON_GetArrayItem(result->child, 
-				cJSON_GetArraySize(result->child) -1);
-
-
-	/* Source spelling 
-	 *
-	 * ( spelling )
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 *
-	 * ( həˈlō )
-	 */
-	cJSON *spelling_src = cJSON_GetArrayItem(spelling, 3);
-
-	if (cJSON_IsString(spelling_src)) {
-		printf("( " YELLOW_E "%s" END_E " )\n", spelling_src->valuestring);
+	/* source lang */
+	if (cJSON_IsString(src_lang)) {
+		printf(GREEN_E "[ %s ]:" END_E " %s\n\n",
+				src_lang->valuestring,
+				get_lang(src_lang->valuestring));
 	}
 
-
-	/* Source lang
-	 *
-	 * [ language code ]: language
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 *
-	 * [en]: English
-	 */
-	cJSON *lang_src = cJSON_GetArrayItem(result, 2);
-
-	if (cJSON_IsString(lang_src)) {
-		char *lang_src_str = lang_src->valuestring;
-		printf(GREEN_E "[ %s ]:" END_E " %s\n\n", lang_src_str,
-				get_lang(lang_src_str));
+	/* target text */
+	cJSON_ArrayForEach(i, trans_text) {
+		if (cJSON_IsString(i->child))
+			printf(WHITE_BOLD_E "%s" END_E, i->child->valuestring);
 	}
 
-
-	/* Target text */
-	cJSON *target = result->child;
-	cJSON *target_val;
-
-	cJSON_ArrayForEach(i, target) {
-		target_val = i->child;
-		if (cJSON_IsString(target_val))
-			printf(WHITE_BOLD_E "%s" END_E, target_val->valuestring);
-	}
 	putchar('\n');
 
-
-	/* Target spelling 
-	 *
-	 * ( spelling )
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 *
-	 * ( həˈlō )
-	 */
-	cJSON *spelling_target = cJSON_GetArrayItem(spelling, 2);
-
-	if (cJSON_IsString(spelling_target)) {
-		printf("( " YELLOW_E "%s" END_E " )\n", spelling_target->valuestring);
+	/* target spelling */
+	if (cJSON_IsString(tgt_spelling)) {
+		printf("( " YELLOW_E "%s" END_E " )\n",
+				tgt_spelling->valuestring);
 	}
 
-
-	/* Target lang
-	 *
-	 * [ language code ]: language
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 *
-	 * [id]: Indonesian
-	 */
+	/* target lang */
 	printf( GREEN_E "[ %s ]:" END_E " %s\n",
 			tr->target, get_lang(tr->target));
 
+	putchar('\n');
 
-	/* Synonyms 
-	 *
-	 * [ label ] (depends on target language)
-	 *   target word alternative:
-	 *         -> list alternative words
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 * NOTE: verba = verb
-	 *
-	 * [Verba]
-	 *   Halo!:
-	 *         -> Hello!
-	 *   Salam!:
-	 *         -> Hallo!, Holla!, Hello!
-	 */
-	cJSON *synonym = cJSON_GetArrayItem(result, 1);
-	cJSON *syn_label,
-	      *syn_src,
-	      *syn_target;
+	/* synonyms */
+	if (!cJSON_IsArray(synonyms) || synonym_max_line == 0)
+		goto l_definitions;
 
-	if (cJSON_IsArray(synonym))
-		printf("\n%s", "------------------------");
+	printf("\n%s", "------------------------");
 
-	cJSON_ArrayForEach(i, synonym) {
-		int max_syn = synonym_max_line;
-		syn_label   = i->child; /* Verb, Noun, etc */
+	char *syn_lbl_str; /* label */
+	cJSON_ArrayForEach(i, synonyms) {
+		int   iter	= 1;
+		int   syn_max	= synonym_max_line;
+		char *tgt_syn_str;
 
-		printf("\n" BLUE_BOLD_E "[ %s ]" END_E, syn_label->valuestring);
+		syn_lbl_str = i->child->valuestring;	  /* Verb, Noun, etc */
+		syn_lbl_str[0] = toupper(syn_lbl_str[0]);
 
-		/* target word alternatives */
-		cJSON_ArrayForEach(syn_target, cJSON_GetArrayItem(i, 2)) {
-			if (max_syn == 0)
+		printf("\n" BLUE_BOLD_E "[ %s ]" END_E, syn_lbl_str);
+
+		/* target alternatives */
+		cJSON_ArrayForEach(tgt_syn, cJSON_GetArrayItem(i, 2)) {
+			if (syn_max == 0)
 				break;
-			if (max_syn > 0)
-				max_syn--;
 
-			printf("\n  " WHITE_BOLD_E "%s:" END_E "\n\t"
+			tgt_syn_str = tgt_syn->child->valuestring;
+			tgt_syn_str[0] = toupper(tgt_syn_str[0]);
+
+			printf("\n" WHITE_BOLD_E "%d. %s:" END_E "\n\t"
 					YELLOW_E "-> " END_E,
-					syn_target->child->valuestring);
+					iter, tgt_syn_str);
 
-			/* source word alternatives */
+			/* source alternatives */
 			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(
-							syn_target, 1)) -1;
-			cJSON_ArrayForEach(syn_src,
-					cJSON_GetArrayItem(syn_target, 1)) {
-				printf("%s", syn_src->valuestring);
+						tgt_syn, 1)) -1;
+			cJSON_ArrayForEach(src_syn,
+					cJSON_GetArrayItem(tgt_syn, 1)) {
+				printf("%s", src_syn->valuestring);
 
 				if (syn_src_size > 0) {
 					printf(", ");
 					syn_src_size--;
 				}
 			}
+			iter++;
+			syn_max--;
 		}
 		putchar('\n');
 	}
+	putchar('\n');
 
 
-	/* Examples 
-	 *
-	 * [ label ] (depends on target language)
-	 *   explainations
-	 *      -> examples
-	 *
-	 *------------------------------------
-	 * Example:
-	 *------------------------------------
-	 * NOTE: kata seru = interjection, nomina = noun
-	 *
-	 * [ Kata seru ]
-         *   used as a greeting or to begin a phone conversation.
-	 *      -> hello there, Katie!
-	 *
-	 * [ Nomina ]
-	 *   an utterance of “hello”; a greeting.
-	 *      -> she was getting polite nods and hellos from people
-	 */
-	cJSON *example = cJSON_GetArrayItem(result, 12);
-	cJSON *example_sub,
-	      *example_desc,
-	      *example_val,
-	      *example_exp;
+l_definitions:
+	/* definitions */
+	if (!cJSON_IsArray(definitions) || definition_max_line == 0)
+		goto l_example;
 
-	if (cJSON_IsArray(example))
-		printf("\n\n%s", "------------------------");
+	printf("\n%s", "------------------------");
 
-	cJSON_ArrayForEach(i, example) {
-		cJSON *example_label = i->child;
+	char *def_lbl_str; /* label */
+	cJSON_ArrayForEach(i, definitions) {
+		int   iter	= 1;
+		int   def_max	= definition_max_line;
+		char *def_sub_str;
 
-		if (strlen(example_label->valuestring) > 0)
-			printf("\n" YELLOW_BOLD_E "[ %s ]" END_E,
-					example_label->valuestring);
+		def_lbl_str = i->child->valuestring;
 
-		cJSON_ArrayForEach(example_sub, cJSON_GetArrayItem(i, 1)) {
-			example_desc = example_sub->child;
-			example_val  = cJSON_GetArrayItem(example_sub, 2);
-			example_exp  = cJSON_GetArrayItem(example_sub, 3);
+		if (strlen(def_lbl_str) == 0)
+			continue;
 
-			printf("\n  " WHITE_BOLD_E "%s" END_E "\n\t",
-					example_desc->valuestring);
+		def_lbl_str[0] = toupper(def_lbl_str[0]);
+		printf("\n" YELLOW_BOLD_E "[ %s ]" END_E, def_lbl_str);
 
-			if (cJSON_IsString(example_val))
-				printf(YELLOW_E "->" END_E
-					       	" %s ", example_val->valuestring);
+		cJSON_ArrayForEach(def_sub, cJSON_GetArrayItem(i, 1)) {
+			if (def_max == 0)
+				break;
 
-			if (cJSON_IsArray(example_exp) &&
-					cJSON_IsString(example_exp->child->child)) {
-				printf(GREEN_E "[ %s ]" END_E
-					, example_exp->child->child->valuestring);
+			def_val	= cJSON_GetArrayItem(def_sub, 2);
+			def_oth	= cJSON_GetArrayItem(def_sub, 3);
+
+			def_sub_str	= def_sub->child->valuestring;
+			def_sub_str[0]	= toupper(def_sub_str[0]);
+
+			printf("\n" WHITE_BOLD_E "%d. %s" END_E "\n\t",
+					iter, def_sub_str);
+
+			if (cJSON_IsString(def_val)) {
+				printf(YELLOW_E "->" END_E " %s ",
+						def_val->valuestring);
 			}
+
+			if (cJSON_IsArray(def_oth) &&
+					cJSON_IsString(def_oth->child->child)) {
+				printf(GREEN_E "[ %s ]" END_E,
+					def_oth->child->child->valuestring);
+			}
+			iter++;
+			def_max--;
 		}
 		putchar('\n');
 	}
+	putchar('\n');
 
-	/* More examples */
-	cJSON *more_example = cJSON_GetArrayItem(result, 13);
-	cJSON *more_example_a,
-	      *more_example_val;
+l_example:
+	if (!cJSON_IsArray(examples) || example_max_line == 0)
+		return; /* it's over */
 
-	if (cJSON_IsArray(more_example)) {
-		printf("\n\n%s\n", "------------------------");
+	printf("\n%s\n", "------------------------");
 
-		int example_max = example_max_line;
+	int  iter	= 1;
+	int  expl_max	= example_max_line;
+	char *expl_str;
+	cJSON_ArrayForEach(i, examples) {
+		cJSON_ArrayForEach(expl_val, i) {
+			if (expl_max == 0)
+				break;
 
-		cJSON_ArrayForEach(i, more_example) {
-			cJSON_ArrayForEach(more_example_a, i) {
-				more_example_val = more_example_a->child;
-				if (!cJSON_IsString(more_example_val) ||
-						example_max == 0)
-					break;
-				if (example_max > 0)
-					example_max--;
+			expl_str = expl_val->child->valuestring;
 
-				/* eliminating <b> ... </b> tags */
-				trim_tag(more_example_val->valuestring, 'b');
-				printf("\"" YELLOW_E "%s" END_E "\"\n",
-						more_example_val->valuestring);
-			}
+			/* eliminating <b> ... </b> tags */
+			trim_tag(expl_str, 'b');
+
+			expl_str[0] = toupper(expl_str[0]);
+
+			printf("%d. " YELLOW_E "%s" END_E "\n",
+					iter, expl_str);
+
+			iter++;
+			expl_max--;
 		}
 		putchar('\n');
 	}
