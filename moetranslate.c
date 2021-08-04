@@ -509,7 +509,6 @@ main(int argc, char *argv[])
 
 	if (strcmp(argv[1], "-b") == 0)
 		t.mode = BRIEF;
-
 	else if (strcmp(argv[1], "-f") == 0)
 		t.mode = FULL;
 	else
