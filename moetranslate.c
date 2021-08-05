@@ -4,6 +4,7 @@
  *
  * See LICENSE file for license details
  */
+#include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,15 +55,15 @@ typedef struct {
 } Url;
 
 /* function declaration */
-static void	 brief_mode	 (const cJSON *result);
-static void	 detect_lang	 (const cJSON *result);
-static void	 full_mode	 (const Translate *tr, cJSON *result);
-static char	*get_lang	 (const char *lcode);
-static void	 get_result	 (const Translate *tr);
-static void	 help		 (FILE *out);
-static void	 request_handler (Memory *dest, CURL *curl, const char *url);
-static char	*url_parser	 (char *dest, size_t len, const Translate *tr);
-static size_t	 write_callback	 (char *ptr, size_t size, size_t nmemb, void *data);
+static void        brief_mode      (const cJSON *result);
+static void        detect_lang     (const cJSON *result);
+static void        full_mode       (const Translate *tr, cJSON *result);
+static const char *get_lang        (const char *lcode);
+static void        get_result      (const Translate *tr);
+static void        help            (FILE *out);
+static void        request_handler (Memory *dest, CURL *curl, const char *url);
+static char       *url_parser      (char *dest, size_t len, const Translate *tr);
+static size_t      write_callback  (char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
@@ -323,13 +324,13 @@ l_example:
 	}
 }
 
-static char *
+static const char *
 get_lang(const char *lcode)
 {
 	size_t lang_len = LENGTH(language);
 	for (size_t i = 0; i < lang_len; i++) {
 		if (strncmp(lcode, language[i].lcode, 5) == 0)
-			return (char*)language[i].lang;
+			return language[i].lang;
 	}
 
 	return NULL;

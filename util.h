@@ -1,5 +1,3 @@
-#include <ctype.h>
-
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
 
 void	 die		(const char *fmt, ...	);
