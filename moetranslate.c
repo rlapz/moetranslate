@@ -4,6 +4,8 @@
  *
  * See LICENSE file for license details
  */
+#define _POSIX_C_SOURCE 200809L
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -54,22 +56,145 @@ typedef struct {
 	char   	*params[3]; /* url parameter (brief, full mode, detect lang) */
 } Url;
 
-/* function declaration */
+/* function declaration, ordered in logical manner */
+static const char *get_lang        (const char *lcode);
+static void        get_result      (const Translate *tr);
+static char       *url_parser      (char *dest, size_t len, const Translate *tr);
+static void        request_handler (Memory *dest, CURL *curl, const char *url);
+static size_t      write_callback  (char *ptr, size_t size, size_t nmemb, void *data);
 static void        brief_mode      (const cJSON *result);
 static void        detect_lang     (const cJSON *result);
 static void        full_mode       (const Translate *tr, cJSON *result);
-static const char *get_lang        (const char *lcode);
-static void        get_result      (const Translate *tr);
 static void        help            (FILE *out);
-static void        request_handler (Memory *dest, CURL *curl, const char *url);
-static char       *url_parser      (char *dest, size_t len, const Translate *tr);
-static size_t      write_callback  (char *ptr, size_t size, size_t nmemb, void *data);
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
 
 /* function implementations */
+static const char *
+get_lang(const char *lcode)
+{
+	size_t lang_len = LENGTH(language);
+	for (size_t i = 0; i < lang_len; i++) {
+		if (strncmp(lcode, language[i].lcode, 5) == 0)
+			return language[i].lang;
+	}
+
+	return NULL;
+}
+
+static void
+get_result(const Translate *tr)
+{
+	char	 url[(TEXT_MAX_LEN * 3) + 150] = {0};
+	CURL	*curl;
+	cJSON	*result;
+	Memory	 mem = {NULL, 0};
+
+	curl = curl_easy_init();
+	if (curl == NULL)
+		die("get_result(): curl_easy_init()");
+
+	url_parser(url, sizeof(url), tr);
+	request_handler(&mem, curl, url);
+
+	result = cJSON_Parse(mem.memory);
+	if (result == NULL) {
+		errno = EINVAL;
+		die("get_result(): cJSON_Parse(): Parsing error!");
+	}
+
+	switch (tr->mode) {
+	case BRIEF:
+		brief_mode(result);
+		break;
+	case FULL:
+		full_mode(tr, result);
+		break;
+	case DETECT:
+		detect_lang(result);
+		break;
+	}
+
+	free(mem.memory);
+	cJSON_Delete(result);
+	curl_easy_cleanup(curl);
+}
+
+static char *
+url_parser(char *dest, size_t len, const Translate *tr)
+{
+	int  ret;
+	char text_encode[TEXT_MAX_LEN * 3];
+
+	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
+
+	ret = snprintf(dest, len, "%s%s",
+			url_google.base_url, url_google.params[tr->mode]);
+
+	if (ret < 0)
+		die("url_parser(): formatting url");
+
+	switch (tr->mode) {
+	case DETECT:
+		ret = snprintf(dest + ret, len, "&q=%s", text_encode);
+		break;
+	case BRIEF:
+		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&q=%s",
+				tr->src, tr->target, text_encode);
+		break;
+	case FULL:
+		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&hl=%s&q=%s",
+				tr->src, tr->target, tr->target, text_encode);
+		break;
+	default:
+		die("url_parser(): mode is invalid");
+	}
+
+	if (ret < 0)
+		die("url_parser(): formatting url");
+
+	return dest;
+}
+
+static void
+request_handler(Memory *dest, CURL *curl, const char *url)
+{
+	CURLcode ccode;
+
+	curl_easy_setopt(curl, CURLOPT_URL,		url		);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,	write_callback	);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA,	(void*)dest	);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT,	user_agent	);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT,		timeout		);
+
+	ccode = curl_easy_perform(curl);
+	if (ccode != CURLE_OK)
+		die("request_handler(): %s", curl_easy_strerror(ccode));
+}
+
+/* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
+static size_t
+write_callback(char *contents, size_t size, size_t nmemb, void *data)
+{
+	char   *ptr;
+	Memory *mem	 = (Memory *)data;
+	size_t	realsize = (size * nmemb);
+
+	ptr = realloc(mem->memory, mem->size + realsize +1);
+       	if (ptr == NULL)
+		die("write_callback(): realloc");
+
+	memcpy(ptr + mem->size, contents, realsize);
+
+	mem->memory		 = ptr;
+	mem->size		+= realsize;
+	mem->memory[mem->size]	 = '\0';
+
+	return realsize;
+}
+
 static void
 brief_mode(const cJSON *result)
 {
@@ -324,129 +449,6 @@ l_example:
 	}
 }
 
-static const char *
-get_lang(const char *lcode)
-{
-	size_t lang_len = LENGTH(language);
-	for (size_t i = 0; i < lang_len; i++) {
-		if (strncmp(lcode, language[i].lcode, 5) == 0)
-			return language[i].lang;
-	}
-
-	return NULL;
-}
-
-static void
-get_result(const Translate *tr)
-{
-	char	 url[(TEXT_MAX_LEN * 3) + 150] = {0};
-	CURL	*curl;
-	cJSON	*result;
-	Memory	 mem = {NULL, 0};
-
-	curl = curl_easy_init();
-	if (curl == NULL)
-		die("get_result(): curl_easy_init()");
-
-	url_parser(url, sizeof(url), tr);
-	request_handler(&mem, curl, url);
-
-	result = cJSON_Parse(mem.memory);
-	if (result == NULL) {
-		errno = EINVAL;
-		die("get_result(): cJSON_Parse(): Parsing error!");
-	}
-
-	switch (tr->mode) {
-	case BRIEF:
-		brief_mode(result);
-		break;
-	case FULL:
-		full_mode(tr, result);
-		break;
-	case DETECT:
-		detect_lang(result);
-		break;
-	}
-
-	free(mem.memory);
-	cJSON_Delete(result);
-	curl_easy_cleanup(curl);
-}
-
-static void
-request_handler(Memory *dest, CURL *curl, const char *url)
-{
-	CURLcode ccode;
-
-	curl_easy_setopt(curl, CURLOPT_URL,		url		);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,	write_callback	);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA,	(void*)dest	);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT,	user_agent	);
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT,		timeout		);
-
-	ccode = curl_easy_perform(curl);
-	if (ccode != CURLE_OK)
-		die("request_handler(): %s", curl_easy_strerror(ccode));
-}
-
-static char *
-url_parser(char *dest, size_t len, const Translate *tr)
-{
-	int  ret;
-	char text_encode[TEXT_MAX_LEN * 3];
-
-	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
-
-	ret = snprintf(dest, len, "%s%s",
-			url_google.base_url, url_google.params[tr->mode]);
-
-	if (ret < 0)
-		die("url_parser(): formatting url");
-
-	switch (tr->mode) {
-	case DETECT:
-		ret = snprintf(dest + ret, len, "&q=%s", text_encode);
-		break;
-	case BRIEF:
-		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&q=%s",
-				tr->src, tr->target, text_encode);
-		break;
-	case FULL:
-		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&hl=%s&q=%s",
-				tr->src, tr->target, tr->target, text_encode);
-		break;
-	default:
-		die("url_parser(): mode is invalid");
-	}
-
-	if (ret < 0)
-		die("url_parser(): formatting url");
-
-	return dest;
-}
-
-/* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
-static size_t
-write_callback(char *contents, size_t size, size_t nmemb, void *data)
-{
-	char   *ptr;
-	Memory *mem	 = (Memory *)data;
-	size_t	realsize = (size * nmemb);
-
-	ptr = realloc(mem->memory, mem->size + realsize +1);
-       	if (ptr == NULL)
-		die("write_callback(): realloc");
-
-	memcpy(ptr + mem->size, contents, realsize);
-
-	mem->memory		 = ptr;
-	mem->size		+= realsize;
-	mem->memory[mem->size]	 = '\0';
-
-	return realsize;
-}
-
 static void
 help(FILE *out)
 {
@@ -468,7 +470,6 @@ help(FILE *out)
 		"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
 		"   Detect Lang :  moetranslate -d \"你好\"\n"
 	);
-
 }
 
 

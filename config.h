@@ -13,7 +13,10 @@ static const int  synonym_max_line	= -1;	/* synonym max lines, -1 = show all	*/
 
 static const long timeout		= 10L;	/* set request timeout (10s)		*/
 
-static const char user_agent[]		= "libcurl-agent/1.0";
+/* static const char user_agent[]		= "libcurl-agent/1.0"; */
+static const char user_agent[]		= "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) "
+					  "AppleWebKit/537.31 (KHTML, like Gecko) "
+					  "Chrome/26.0.1410.65 Safari/537.31";
 
 static const Url  url_google		= {
 	"https://translate.googleapis.com/translate_a/single?", /* base url */
