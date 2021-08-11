@@ -4,7 +4,6 @@
  *
  * See LICENSE file for license details
  */
-#define _POSIX_C_SOURCE 200809L
 
 #include <ctype.h>
 #include <errno.h>
@@ -87,7 +86,7 @@ get_lang(const char *lcode)
 static void
 get_result(const Translate *tr)
 {
-	char	 url[(TEXT_MAX_LEN * 3) + 150] = {0};
+	char	 url[(TEXT_MAX_LEN * 3) + 150];
 	CURL	*curl;
 	cJSON	*result;
 	Memory	 mem = {NULL, 0};
@@ -183,7 +182,7 @@ write_callback(char *contents, size_t size, size_t nmemb, void *data)
 	size_t	realsize = (size * nmemb);
 
 	ptr = realloc(mem->memory, mem->size + realsize +1);
-       	if (ptr == NULL)
+	if (ptr == NULL)
 		die("write_callback(): realloc");
 
 	memcpy(ptr + mem->size, contents, realsize);
@@ -262,20 +261,13 @@ full_mode(const Translate *tr, cJSON *result)
 	cJSON *tgt_spelling	= cJSON_GetArrayItem(spelling, 2);
 
 
-	cJSON *src_text_val;
 	cJSON *src_syn, *tgt_syn;		/* synonyms	*/
 	cJSON *def_sub, *def_val, *def_oth;	/* definitions	*/
 	cJSON *expl_val;			/* examples	*/
 
 
 	/* source text */
-	putchar('"');
-	cJSON_ArrayForEach(i, trans_text) {
-		src_text_val = i->child->next;
-		if (cJSON_IsString(src_text_val))
-			printf("%s", src_text_val->valuestring);
-	}
-	puts("\"");
+	printf("\"%s\"\n", tr->text);
 
 	/* correction */
 	if (cJSON_IsString(src_correction->child)) {

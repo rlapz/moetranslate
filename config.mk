@@ -13,7 +13,8 @@ INCS =
 LIBS = -lcurl
 
 # flags
-CFLAGS += -std=c99 -pedantic -Wall -Wextra -Wno-deprecated-declarations -Os ${INCS}
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L
+CFLAGS += -std=c99 -pedantic -Wall -Wextra -Wno-deprecated-declarations -Os ${INCS} ${CPPFLAGS}
 LDFLAGS += ${LIBS}
 
 # compiler and linker
