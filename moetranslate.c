@@ -30,6 +30,7 @@
 enum {
 	BRIEF,
 	FULL,
+	RAW,
 	DETECT
 };
 
@@ -52,7 +53,7 @@ typedef struct {
 
 typedef struct {
 	char	*base_url;
-	char   	*params[3]; /* url parameter (brief, full mode, detect lang) */
+	char   	*params[4]; /* url parameter (brief, full, raw mode, detect lang) */
 } Url;
 
 /* function declaration, ordered in logical manner */
@@ -64,6 +65,7 @@ static size_t      write_callback  (char *ptr, size_t size, size_t nmemb, void *
 static void        brief_mode      (const cJSON *result);
 static void        detect_lang     (const cJSON *result);
 static void        full_mode       (const Translate *tr, cJSON *result);
+static void        raw_mode        (const cJSON *result);
 static void        help            (FILE *out);
 
 /* config.h for applying patches and the configuration. */
@@ -111,6 +113,9 @@ get_result(const Translate *tr)
 	case FULL:
 		full_mode(tr, result);
 		break;
+	case RAW:
+		raw_mode(result);
+		break;
 	case DETECT:
 		detect_lang(result);
 		break;
@@ -124,27 +129,29 @@ get_result(const Translate *tr)
 static char *
 url_parser(char *dest, size_t len, const Translate *tr)
 {
-	int  ret;
+	int  ret = -1;
+	int  mode = tr->mode;
 	char text_encode[TEXT_MAX_LEN * 3];
 
 	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
 
-	ret = snprintf(dest, len, "%s%s",
-			url_google.base_url, url_google.params[tr->mode]);
-
-	if (ret < 0)
-		die("url_parser(): formatting url");
-
 	switch (tr->mode) {
 	case DETECT:
-		ret = snprintf(dest + ret, len, "&q=%s", text_encode);
+		ret = snprintf(dest, len, "%s%s&q=%s", 
+				url_google.base_url, url_google.params[mode],
+				text_encode);
 		break;
 	case BRIEF:
-		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&q=%s",
+		ret = snprintf(dest, len, "%s%s&sl=%s&tl=%s&q=%s",
+				url_google.base_url, url_google.params[mode],
 				tr->src, tr->target, text_encode);
 		break;
+	case RAW :
+		mode = FULL; /* because raw and full mode has the same url */
+ 		/* FALLTHROUGH */
 	case FULL:
-		ret = snprintf(dest + ret, len, "&sl=%s&tl=%s&hl=%s&q=%s",
+		ret = snprintf(dest, len, "%s%s&sl=%s&tl=%s&hl=%s&q=%s",
+				url_google.base_url, url_google.params[mode],
 				tr->src, tr->target, tr->target, text_encode);
 		break;
 	default:
@@ -442,6 +449,16 @@ l_example:
 }
 
 static void
+raw_mode(const cJSON *result)
+{
+	char *out = cJSON_Print(result);
+
+	puts(out);
+
+	free(out);
+}
+
+static void
 help(FILE *out)
 {
 	if (out == stderr) {
@@ -454,6 +471,7 @@ help(FILE *out)
 		"Usage: moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
 		"       -b         Brief mode\n"
 		"       -f         Full mode\n"
+		"       -r         Raw output\n"
 		"       -d         Detect language\n"
 		"       -h         Show this help\n\n"
 		"Examples:\n"
@@ -505,6 +523,8 @@ main(int argc, char *argv[])
 		t.mode = BRIEF;
 	else if (strcmp(argv[1], "-f") == 0)
 		t.mode = FULL;
+	else if (strcmp(argv[1], "-r") == 0)
+		t.mode = RAW;
 	else
 		goto err;
 
