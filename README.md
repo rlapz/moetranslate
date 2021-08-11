@@ -32,11 +32,12 @@ sudo make uninstall
 ## How to Use:
 
 ```
-moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]
+moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 
 -b = Brief mode (only show simple output).
 -f = Full mode.
--d = Detect language
+-r = Raw output (json).
+-d = Detect language.
 -h = Show help message.
 ```
 
