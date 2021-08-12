@@ -19,6 +19,8 @@
 /* macros */
 enum { BRIEF, FULL, RAW, DETECT };
 
+enum { NORMAL, INTERACTIVE };
+
 typedef struct {
 	char   *lcode,	   /* language code    */
 	       *lang;
@@ -51,6 +53,7 @@ static void        brief_mode      (const cJSON *result);
 static void        detect_lang     (const cJSON *result);
 static void        full_mode       (const Translate *tr, cJSON *result);
 static void        raw_mode        (const cJSON *result);
+static void        inter_input     (Translate *tr);
 static void        help            (FILE *out);
 
 /* config.h for applying patches and the configuration. */
@@ -442,6 +445,30 @@ raw_mode(const cJSON *result)
 }
 
 static void
+inter_input(Translate *tr)
+{
+	printf(WHITE_BOLD_C
+		"Interactive input mode" END_C "\n"
+		"Max text length: %d\n\n", TEXT_MAX_LEN
+	);
+
+	char buffer[TEXT_MAX_LEN];
+
+	while (1) {
+		printf("Input text: ");
+		fgets(buffer, TEXT_MAX_LEN, stdin);
+
+		if (strlen(buffer) <= 1)
+			break;
+
+		tr->text = buffer;
+		get_result(tr);
+
+		putchar('\n');
+	}
+}
+
+static void
 help(FILE *out)
 {
 	if (out == stderr) {
@@ -456,12 +483,14 @@ help(FILE *out)
 		"       -f         Full mode\n"
 		"       -r         Raw output (json)\n"
 		"       -d         Detect language\n"
+		"       -i         Interactive input\n"
 		"       -h         Show this help\n\n"
 		"Examples:\n"
 		"   Brief Mode  :  moetranslate -b en:id \"Hello\"\n"
 		"   Full Mode   :  moetranslate -f id:en \"Halo\"\n"
 		"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
 		"   Detect Lang :  moetranslate -d \"你好\"\n"
+		"   Interactive :  moetranslate -i -f auto:en \"Hello\"\n"
 	);
 }
 
@@ -475,7 +504,8 @@ main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	Translate t = {0};
+	Translate t    = {0};
+	int input_mode = NORMAL;
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
@@ -486,11 +516,22 @@ main(int argc, char *argv[])
 	if (argc != 4)
 		goto err;
 
+	if (strcmp(argv[1], "-i") == 0) {
+		input_mode = INTERACTIVE;
+		argv += 1;
+	}
+
 	char *src    = strtok(argv[2], ":"),
 	     *target = strtok(NULL,    ":");
 
 	if (src == NULL || target == NULL)
 		goto err;
+
+	t.src    = src;
+	t.target = target;
+
+	if (input_mode == NORMAL)
+		t.text = ltrim(rtrim(argv[3]));
 
 	if (get_lang(src) == NULL) {
 		fprintf(stderr, "Unknown \"%s\" language code\n", src);
@@ -511,18 +552,25 @@ main(int argc, char *argv[])
 	else
 		goto err;
 
-	t.src    = src;
-	t.target = target;
-	t.text	 = ltrim(rtrim(argv[3]));
-
 result:
-	if (strlen(t.text) >= TEXT_MAX_LEN) {
+	if (input_mode == NORMAL && strlen(t.text) >= TEXT_MAX_LEN) {
 		fprintf(stderr, "Text too long, MAX length: %d characters\n",
 				TEXT_MAX_LEN);
 		goto err;
 	}
 
-	get_result(&t);
+
+	switch (input_mode) {
+	case NORMAL:
+		get_result(&t);
+		break;
+	case INTERACTIVE:
+		inter_input(&t);
+		break;
+	default:
+		goto err;
+	}
+
 	return EXIT_SUCCESS;
 
 err:
