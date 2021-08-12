@@ -5,7 +5,17 @@
  * See LICENSE file for license details
  */
 
-#define TEXT_MAX_LEN 2048
+#define TEXT_MAX_LEN 2048	/* max input text length */
+
+/* colors */
+#define GREEN_E		"\033[00;32m"
+#define YELLOW_E	"\033[00;33m"
+#define GREEN_BOLD_E	"\033[01;32m"
+#define YELLOW_BOLD_E	"\033[01;33m"
+#define BLUE_BOLD_E	"\033[01;34m"
+#define WHITE_BOLD_E	"\033[01;37m"
+#define END_E		"\033[00m"
+
 
 static const int  definition_max_line	= -1;	/* definition max lines, 0 = disable, -1 = show all */
 static const int  example_max_line	= 5;	/* example max lines,    0 = disable, -1 = show all */

@@ -17,16 +17,6 @@
 #include "util.h"
 
 /* macros */
-#define GREEN_E		"\033[00;32m"
-#define YELLOW_E	"\033[00;33m"
-
-#define GREEN_BOLD_E	"\033[01;32m"
-#define YELLOW_BOLD_E	"\033[01;33m"
-#define BLUE_BOLD_E	"\033[01;34m"
-#define WHITE_BOLD_E	"\033[01;37m"
-
-#define END_E		"\033[00m"
-
 enum {
 	BRIEF,
 	FULL,
