@@ -17,33 +17,28 @@
 #include "util.h"
 
 /* macros */
-enum {
-	BRIEF,
-	FULL,
-	RAW,
-	DETECT
-};
+enum { BRIEF, FULL, RAW, DETECT };
 
 typedef struct {
-	char	*lcode;	   /* language code    */
-	char	*lang;
+	char   *lcode,	   /* language code    */
+	       *lang;
 } Language;
 
 typedef struct {
-	char	*memory;
-	size_t	 size;
+	char   *memory;
+	size_t  size;
 } Memory;
 
 typedef struct {
-	int	 mode;	   /* mode translation */
-	char   	*src;	   /* source language  */
-	char   	*target;   /* target language  */
-	char   	*text;	   /* text/words       */
+	int     mode;	   /* mode translation */
+	char   *src,	   /* source language  */
+	       *target,    /* target language  */
+	       *text;	   /* text/words       */
 } Translate;
 
 typedef struct {
-	char	*base_url;
-	char   	*params[4]; /* url parameter (brief, full, raw mode, detect lang) */
+	char   *base_url,
+	       *params[4]; /* url parameter (brief, full, raw mode, detect lang) */
 } Url;
 
 /* function declaration, ordered in logical manner */
@@ -67,8 +62,9 @@ static const char *
 get_lang(const char *lcode)
 {
 	size_t lang_len = LENGTH(language);
+
 	for (size_t i = 0; i < lang_len; i++) {
-		if (strncmp(lcode, language[i].lcode, 5) == 0)
+		if (strcmp(lcode, language[i].lcode) == 0)
 			return language[i].lang;
 	}
 
@@ -78,14 +74,14 @@ get_lang(const char *lcode)
 static void
 get_result(const Translate *tr)
 {
-	char	 url[(TEXT_MAX_LEN * 3) + 150];
-	CURL	*curl;
-	cJSON	*result;
-	Memory	 mem = {NULL, 0};
+	char    url[(TEXT_MAX_LEN * 3) + 150];
+	CURL   *curl;
+	cJSON  *result;
+	Memory  mem = {0};
 
 	curl = curl_easy_init();
 	if (curl == NULL)
-		die("get_result(): curl_easy_init()");
+		DIE("get_result(): curl_easy_init()");
 
 	url_parser(url, sizeof(url), tr);
 	request_handler(&mem, curl, url);
@@ -93,7 +89,7 @@ get_result(const Translate *tr)
 	result = cJSON_Parse(mem.memory);
 	if (result == NULL) {
 		errno = EINVAL;
-		die("get_result(): cJSON_Parse(): Parsing error!");
+		DIE("get_result(): cJSON_Parse(): Parsing error!");
 	}
 
 	switch (tr->mode) {
@@ -137,7 +133,8 @@ url_parser(char *dest, size_t len, const Translate *tr)
 				tr->src, tr->target, text_encode);
 		break;
 	case RAW :
-		mode = FULL; /* because raw and full mode has the same url */
+		/* because raw and full mode has the same url */
+		mode = FULL;
  		/* FALLTHROUGH */
 	case FULL:
 		ret = snprintf(dest, len, "%s%s&sl=%s&tl=%s&hl=%s&q=%s",
@@ -145,11 +142,11 @@ url_parser(char *dest, size_t len, const Translate *tr)
 				tr->src, tr->target, tr->target, text_encode);
 		break;
 	default:
-		die("url_parser(): mode is invalid");
+		DIE("url_parser(): mode is invalid");
 	}
 
 	if (ret < 0)
-		die("url_parser(): formatting url");
+		DIE("url_parser(): formatting url");
 
 	return dest;
 }
@@ -159,15 +156,16 @@ request_handler(Memory *dest, CURL *curl, const char *url)
 {
 	CURLcode ccode;
 
-	curl_easy_setopt(curl, CURLOPT_URL,		url		);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,	write_callback	);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA,	(void*)dest	);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT,	user_agent	);
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT,		timeout		);
+	curl_easy_setopt(curl, CURLOPT_URL,           url            );
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback );
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA,     (Memory *)dest );
+	curl_easy_setopt(curl, CURLOPT_USERAGENT,     user_agent     );
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       timeout        );
 
 	ccode = curl_easy_perform(curl);
-	if (ccode != CURLE_OK)
-		die("request_handler(): %s", curl_easy_strerror(ccode));
+	if (ccode != CURLE_OK) {
+		DIE_E("request_handler()", curl_easy_strerror(ccode));
+	}
 }
 
 /* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
@@ -175,18 +173,18 @@ static size_t
 write_callback(char *contents, size_t size, size_t nmemb, void *data)
 {
 	char   *ptr;
-	Memory *mem	 = (Memory *)data;
+	Memory *mem      = (Memory *)data;
 	size_t	realsize = (size * nmemb);
 
 	ptr = realloc(mem->memory, mem->size + realsize +1);
 	if (ptr == NULL)
-		die("write_callback(): realloc");
+		DIE("write_callback(): realloc");
 
 	memcpy(ptr + mem->size, contents, realsize);
 
-	mem->memory		 = ptr;
-	mem->size		+= realsize;
-	mem->memory[mem->size]	 = '\0';
+	mem->memory             = ptr;
+	mem->size              += realsize;
+	mem->memory[mem->size]  = '\0';
 
 	return realsize;
 }
@@ -210,11 +208,12 @@ detect_lang(const cJSON *result)
 {
 	/* faster than cJSON_GetArrayItem(result, 2)
 	 * (without iterations) but UNSAFE */ 
+	char  *lang_c;
 	cJSON *lang_src = result->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
-		char *l = lang_src->valuestring;
-		printf("%s (%s)\n", l, get_lang(l));
+		lang_c = lang_src->valuestring;
+		printf("%s (%s)\n", lang_c, get_lang(lang_c));
 	}
 }
 
@@ -244,23 +243,26 @@ full_mode(const Translate *tr, cJSON *result)
 	 */
 
 	cJSON *i; /* iterator  */
-	cJSON *trans_text	= result->child;
+	cJSON *trans_text     = result->child;
 
-	cJSON *examples		= cJSON_GetArrayItem(result, 13);
-	cJSON *definitions	= cJSON_GetArrayItem(result, 12);
-	cJSON *spelling		= cJSON_GetArrayItem(trans_text,
-					cJSON_GetArraySize(trans_text) -1);
-	cJSON *src_correction	= cJSON_GetArrayItem(result, 7);
-	cJSON *src_lang		= cJSON_GetArrayItem(result, 2);
-	cJSON *synonyms		= cJSON_GetArrayItem(result, 1);
+	cJSON *examples       = cJSON_GetArrayItem(result, 13),
+	      *definitions    = cJSON_GetArrayItem(result, 12),
+	      *spelling       = cJSON_GetArrayItem(trans_text,
+				 cJSON_GetArraySize(trans_text) -1);
+	cJSON *src_correction = cJSON_GetArrayItem(result, 7),
+	      *src_lang       = cJSON_GetArrayItem(result, 2),
+	      *synonyms       = cJSON_GetArrayItem(result, 1);
 
-	cJSON *src_spelling	= cJSON_GetArrayItem(spelling, 3);
-	cJSON *tgt_spelling	= cJSON_GetArrayItem(spelling, 2);
+	cJSON *src_spelling   = cJSON_GetArrayItem(spelling, 3),
+	      *tgt_spelling   = cJSON_GetArrayItem(spelling, 2);
 
 
-	cJSON *src_syn, *tgt_syn;		/* synonyms	*/
-	cJSON *def_sub, *def_val, *def_oth;	/* definitions	*/
-	cJSON *expl_val;			/* examples	*/
+	cJSON *src_syn,  /* synonyms    */
+	      *tgt_syn;
+	cJSON *def_sub,  /* definitions */
+	      *def_val,
+	      *def_oth;
+	cJSON *expl_val; /* examples    */	
 
 
 	/* source text */
@@ -268,42 +270,35 @@ full_mode(const Translate *tr, cJSON *result)
 
 	/* correction */
 	if (cJSON_IsString(src_correction->child)) {
-		printf("\n" YELLOW_BOLD_E "Did you mean: " END_E
-			"\"%s\"" YELLOW_BOLD_E " ?\n\n" END_E,
+		printf("\n" YELLOW_BOLD_C "Did you mean: " END_C
+			"\"%s\"" YELLOW_BOLD_C " ?\n\n" END_C,
 			src_correction->child->next->valuestring);
 	}
 
 	/* source spelling */
-	if (cJSON_IsString(src_spelling)) {
-		printf("( " YELLOW_E "%s" END_E " )\n",
-				src_spelling->valuestring);
-	}
-
+	if (cJSON_IsString(src_spelling))
+		printf("( " YELLOW_C "%s" END_C " )\n", src_spelling->valuestring);
 
 	/* source lang */
 	if (cJSON_IsString(src_lang)) {
-		printf(GREEN_E "[ %s ]:" END_E " %s\n\n",
-				src_lang->valuestring,
-				get_lang(src_lang->valuestring));
+		printf(GREEN_C "[ %s ]:" END_C " %s\n\n",
+			src_lang->valuestring, get_lang(src_lang->valuestring));
 	}
 
 	/* target text */
 	cJSON_ArrayForEach(i, trans_text) {
 		if (cJSON_IsString(i->child))
-			printf(WHITE_BOLD_E "%s" END_E, i->child->valuestring);
+			printf(WHITE_BOLD_C "%s" END_C, i->child->valuestring);
 	}
 
 	putchar('\n');
 
 	/* target spelling */
-	if (cJSON_IsString(tgt_spelling)) {
-		printf("( " YELLOW_E "%s" END_E " )\n",
-				tgt_spelling->valuestring);
-	}
+	if (cJSON_IsString(tgt_spelling))
+		printf("( " YELLOW_C "%s" END_C " )\n", tgt_spelling->valuestring);
 
 	/* target lang */
-	printf( GREEN_E "[ %s ]:" END_E " %s\n",
-			tr->target, get_lang(tr->target));
+	printf( GREEN_C "[ %s ]:" END_C " %s\n", tr->target, get_lang(tr->target));
 
 	putchar('\n');
 
@@ -313,16 +308,19 @@ full_mode(const Translate *tr, cJSON *result)
 
 	printf("\n%s", "------------------------");
 
-	char *syn_lbl_str; /* label */
-	cJSON_ArrayForEach(i, synonyms) {
-		int   iter	= 1;
-		int   syn_max	= synonym_max_line;
-		char *tgt_syn_str;
+	/* label */
+	char *syn_lbl_str,
+	     *tgt_syn_str;
 
-		syn_lbl_str = i->child->valuestring;	  /* Verb, Noun, etc */
+	cJSON_ArrayForEach(i, synonyms) {
+		int   iter    = 1,
+		      syn_max = synonym_max_line;
+
+		/* Verb, Noun, etc */
+		syn_lbl_str    = i->child->valuestring;
 		syn_lbl_str[0] = toupper(syn_lbl_str[0]);
 
-		printf("\n" BLUE_BOLD_E "[ %s ]" END_E, syn_lbl_str);
+		printf("\n" BLUE_BOLD_C "[ %s ]" END_C, syn_lbl_str);
 
 		/* target alternatives */
 		cJSON_ArrayForEach(tgt_syn, cJSON_GetArrayItem(i, 2)) {
@@ -332,15 +330,14 @@ full_mode(const Translate *tr, cJSON *result)
 			tgt_syn_str = tgt_syn->child->valuestring;
 			tgt_syn_str[0] = toupper(tgt_syn_str[0]);
 
-			printf("\n" WHITE_BOLD_E "%d. %s:" END_E "\n\t"
-					YELLOW_E "-> " END_E,
-					iter, tgt_syn_str);
+			printf("\n" WHITE_BOLD_C "%d. %s:" END_C "\n\t"
+				YELLOW_C "-> " END_C, iter, tgt_syn_str);
 
 			/* source alternatives */
 			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(
 						tgt_syn, 1)) -1;
-			cJSON_ArrayForEach(src_syn,
-					cJSON_GetArrayItem(tgt_syn, 1)) {
+
+			cJSON_ArrayForEach(src_syn, cJSON_GetArrayItem(tgt_syn, 1)) {
 				printf("%s", src_syn->valuestring);
 
 				if (syn_src_size > 0) {
@@ -348,6 +345,7 @@ full_mode(const Translate *tr, cJSON *result)
 					syn_src_size--;
 				}
 			}
+
 			iter++;
 			syn_max--;
 		}
@@ -363,11 +361,12 @@ l_definitions:
 
 	printf("\n%s", "------------------------");
 
-	char *def_lbl_str; /* label */
+	char *def_lbl_str, /* label */
+	     *def_sub_str;
+
 	cJSON_ArrayForEach(i, definitions) {
-		int   iter	= 1;
-		int   def_max	= definition_max_line;
-		char *def_sub_str;
+		int   iter    = 1,
+		      def_max = definition_max_line;
 
 		def_lbl_str = i->child->valuestring;
 
@@ -375,7 +374,7 @@ l_definitions:
 			continue;
 
 		def_lbl_str[0] = toupper(def_lbl_str[0]);
-		printf("\n" YELLOW_BOLD_E "[ %s ]" END_E, def_lbl_str);
+		printf("\n" YELLOW_BOLD_C "[ %s ]" END_C, def_lbl_str);
 
 		cJSON_ArrayForEach(def_sub, cJSON_GetArrayItem(i, 1)) {
 			if (def_max == 0)
@@ -384,22 +383,17 @@ l_definitions:
 			def_val	= cJSON_GetArrayItem(def_sub, 2);
 			def_oth	= cJSON_GetArrayItem(def_sub, 3);
 
-			def_sub_str	= def_sub->child->valuestring;
-			def_sub_str[0]	= toupper(def_sub_str[0]);
+			def_sub_str    = def_sub->child->valuestring;
+			def_sub_str[0] = toupper(def_sub_str[0]);
 
-			printf("\n" WHITE_BOLD_E "%d. %s" END_E "\n\t",
-					iter, def_sub_str);
+			printf("\n" WHITE_BOLD_C "%d. %s" END_C "\n\t", iter, def_sub_str);
 
-			if (cJSON_IsString(def_val)) {
-				printf(YELLOW_E "->" END_E " %s ",
-						def_val->valuestring);
-			}
+			if (cJSON_IsString(def_val))
+				printf(YELLOW_C "->" END_C " %s ", def_val->valuestring);
 
-			if (cJSON_IsArray(def_oth) &&
-					cJSON_IsString(def_oth->child->child)) {
-				printf(GREEN_E "[ %s ]" END_E,
-					def_oth->child->child->valuestring);
-			}
+			if (cJSON_IsArray(def_oth) && cJSON_IsString(def_oth->child->child))
+				printf(GREEN_C "[ %s ]" END_C, def_oth->child->child->valuestring);
+
 			iter++;
 			def_max--;
 		}
@@ -413,8 +407,8 @@ l_example:
 
 	printf("\n%s\n", "------------------------");
 
-	int  iter	= 1;
-	int  expl_max	= example_max_line;
+	int  iter     = 1,
+	     expl_max = example_max_line;
 	char *expl_str;
 	cJSON_ArrayForEach(i, examples) {
 		cJSON_ArrayForEach(expl_val, i) {
@@ -428,8 +422,7 @@ l_example:
 
 			expl_str[0] = toupper(expl_str[0]);
 
-			printf("%d. " YELLOW_E "%s" END_E "\n",
-					iter, expl_str);
+			printf("%d. " YELLOW_C "%s" END_C "\n", iter, expl_str);
 
 			iter++;
 			expl_max--;
@@ -458,7 +451,7 @@ help(FILE *out)
 
 	fprintf(out,
 		"moetranslate - A simple language translator\n\n"
-		"Usage: moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
+		"Usage: moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
 		"       -b         Brief mode\n"
 		"       -f         Full mode\n"
 		"       -r         Raw output (json)\n"
@@ -482,7 +475,7 @@ main(int argc, char *argv[])
 		return EXIT_SUCCESS;
 	}
 
-	Translate t = {0, NULL, NULL, NULL};
+	Translate t = {0};
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		t.mode = DETECT;
@@ -517,7 +510,6 @@ main(int argc, char *argv[])
 		t.mode = RAW;
 	else
 		goto err;
-
 
 	t.src    = src;
 	t.target = target;
