@@ -129,8 +129,8 @@ get_result(const Translate *tr)
 static char *
 url_parser(char *dest, size_t len, const Translate *tr)
 {
-	int  ret = -1;
-	int  mode = tr->mode;
+	int  ret  = -1,
+	     mode = tr->mode;
 	char text_encode[TEXT_MAX_LEN * 3];
 
 	url_encode(text_encode, (unsigned char *)tr->text, sizeof(text_encode));
@@ -471,7 +471,7 @@ help(FILE *out)
 		"Usage: moetranslate [-b/-f/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
 		"       -b         Brief mode\n"
 		"       -f         Full mode\n"
-		"       -r         Raw output\n"
+		"       -r         Raw output (json)\n"
 		"       -d         Detect language\n"
 		"       -h         Show this help\n\n"
 		"Examples:\n"
