@@ -13,7 +13,7 @@ PREFIX    = /usr
 CC        = cc
 CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
 	    -D_POSIX_C_SOURCE=200809L -Os
-LDFLAGS   = -lcurl
+LDFLAGS   = -lcurl -ledit
 
 SRC       = moetranslate.c cJSON.c util.c
 OBJ       = ${SRC:.c=.o}

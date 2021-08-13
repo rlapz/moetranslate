@@ -5,6 +5,8 @@
  * See LICENSE file for license details
  */
 
+/* DO WHATEVER YOU WANT! */
+
 #define TEXT_MAX_LEN 2048   /* max input text length */
 
 /* colors */
@@ -27,21 +29,16 @@ static const char user_agent[]        = "Mozilla/5.0 (Macintosh; Intel Mac OS X 
 					"AppleWebKit/537.31 (KHTML, like Gecko) "
 					"Chrome/26.0.1410.65 Safari/537.31";
 
-static const Url  url_google          = {
-	"https://translate.googleapis.com/translate_a/single?",   /* base url              */
-	{
-		[BRIEF]  = "client=gtx&ie=UTF-8&oe=UTF-8&dt=t",   /* url parameter (brief) */
-		[FULL]   = "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"
-			   "dt=ex&dt=ld&dt=md&dt=rw&"
-			   "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca", /* url parameter (full)  */
-		[RAW]	 = "",                                    /* raw and full mode has 
-								     the same url parameter */
-		[DETECT] = "client=gtx&sl=auto"
-	}
-};
+#define BASE_URL        "https://translate.googleapis.com/translate_a/single?"         /* base url */
+#define URL_BRIEF       BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"  /* url parameter (brief) */
+#define URL_DETAIL      BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"  \
+	                         "dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&" \
+                                 "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"      /* url parameter (detail)  */
+#define URL_DETECT_LANG BASE_URL "client=gtx&sl=auto&q=%s"
+
 
 /* 17+1 109 */
-static const Language language[] = {
+static const struct Lang lang[] = {
 {"auto", "Automatic"},
 
 {"af" , "Afrikaans"   }, {"sq"   , "Albanian"           }, {"am"   , "Amharic"             },
