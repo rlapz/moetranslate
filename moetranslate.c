@@ -186,8 +186,8 @@ req_handler(Memory *dest, CURL *curl, const char *url)
 	curl_easy_setopt(curl, CURLOPT_URL,           url            );
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback );
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA,     (Memory *)dest );
-	curl_easy_setopt(curl, CURLOPT_USERAGENT,     user_agent     );
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       timeout        );
+	curl_easy_setopt(curl, CURLOPT_USERAGENT,     USER_AGENT     );
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT,       TIMEOUT        );
 
 	ccode = curl_easy_perform(curl);
 	if (ccode != CURLE_OK) {
@@ -331,7 +331,7 @@ detail_output(Translate *tr)
 	putchar('\n');
 
 	/* synonyms */
-	if (!cJSON_IsArray(synonyms) || synonym_max_line == 0)
+	if (!cJSON_IsArray(synonyms) || SYNONYM_MAX_LINE == 0)
 		goto l_definitions;
 
 	printf("\n%s", "------------------------");
@@ -342,7 +342,7 @@ detail_output(Translate *tr)
 
 	cJSON_ArrayForEach(i, synonyms) {
 		int   iter    = 1,
-		      syn_max = synonym_max_line;
+		      syn_max = SYNONYM_MAX_LINE;
 
 		/* Verb, Noun, etc */
 		syn_lbl_str    = i->child->valuestring;
@@ -384,7 +384,7 @@ detail_output(Translate *tr)
 
 l_definitions:
 	/* definitions */
-	if (!cJSON_IsArray(definitions) || definition_max_line == 0)
+	if (!cJSON_IsArray(definitions) || DEFINITION_MAX_LINE == 0)
 		goto l_example;
 
 	printf("\n%s", "------------------------");
@@ -394,7 +394,7 @@ l_definitions:
 
 	cJSON_ArrayForEach(i, definitions) {
 		int   iter    = 1,
-		      def_max = definition_max_line;
+		      def_max = DEFINITION_MAX_LINE;
 
 		def_lbl_str = i->child->valuestring;
 
@@ -430,13 +430,13 @@ l_definitions:
 	putchar('\n');
 
 l_example:
-	if (!cJSON_IsArray(examples) || example_max_line == 0)
+	if (!cJSON_IsArray(examples) || EXAMPLE_MAX_LINE == 0)
 		return; /* it's over */
 
 	printf("\n%s\n", "------------------------");
 
 	int  iter     = 1,
-	     expl_max = example_max_line;
+	     expl_max = EXAMPLE_MAX_LINE;
 	char *expl_str;
 	cJSON_ArrayForEach(i, examples) {
 		cJSON_ArrayForEach(expl_val, i) {

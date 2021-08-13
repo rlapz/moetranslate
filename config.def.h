@@ -7,7 +7,32 @@
 
 /* DO WHATEVER YOU WANT! */
 
-#define TEXT_MAX_LEN 2048   /* max input text length */
+#define TEXT_MAX_LEN         2048 /* max input text length */
+
+
+#define DEFINITION_MAX_LINE  -1   /* definition max lines, 0 = disable, -1 = show all */
+#define EXAMPLE_MAX_LINE     5    /* example max lines,    0 = disable, -1 = show all */
+#define SYNONYM_MAX_LINE     -1   /* synonym max lines,    0 = disable, -1 = show all */
+
+
+#define TIMEOUT              10L  /* set request timeout (10s) */
+
+
+#define USER_AGENT           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) " \
+			     "AppleWebKit/537.31 (KHTML, like Gecko) "         \
+			     "Chrome/26.0.1410.65 Safari/537.31"               \
+
+
+#define BASE_URL             "https://translate.googleapis.com/translate_a/single?"
+
+#define URL_BRIEF            BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"
+
+#define URL_DETAIL           BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"                \
+	                              "dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&"               \
+                                      "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"
+
+#define URL_DETECT_LANG      BASE_URL "client=gtx&sl=auto&q=%s"
+
 
 /* colors */
 #define GREEN_C       "\033[00;32m"
@@ -17,24 +42,6 @@
 #define BLUE_BOLD_C   "\033[01;34m"
 #define WHITE_BOLD_C  "\033[01;37m"
 #define END_C         "\033[00m"
-
-
-static const int  definition_max_line = -1;  /* definition max lines, 0 = disable, -1 = show all */
-static const int  example_max_line    = 5;   /* example max lines,    0 = disable, -1 = show all */
-static const int  synonym_max_line    = -1;  /* synonym max lines,    0 = disable, -1 = show all */
-
-static const long timeout             = 10L; /* set request timeout (10s) */
-
-static const char user_agent[]        = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) "
-					"AppleWebKit/537.31 (KHTML, like Gecko) "
-					"Chrome/26.0.1410.65 Safari/537.31";
-
-#define BASE_URL        "https://translate.googleapis.com/translate_a/single?"         /* base url */
-#define URL_BRIEF       BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"  /* url parameter (brief) */
-#define URL_DETAIL      BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"  \
-	                         "dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&" \
-                                 "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"      /* url parameter (detail)  */
-#define URL_DETECT_LANG BASE_URL "client=gtx&sl=auto&q=%s"
 
 
 /* 17+1 109 */
