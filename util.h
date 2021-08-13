@@ -1,7 +1,7 @@
-#define DIE(msg)                    \
-	do {                        \
-		perror(msg);        \
-		exit(EXIT_FAILURE); \
+#define DIE(msg)                                     \
+	do {                                         \
+		perror(msg);                         \
+		exit(EXIT_FAILURE);                  \
 	} while (0);
 
 #define DIE_E(msg, p)                                \

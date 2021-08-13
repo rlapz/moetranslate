@@ -26,7 +26,8 @@ typedef enum {
 } DisplayText;
 
 struct Lang {
-	char *code, *value;
+	char *code,
+	     *value;
 };
 
 typedef struct {
@@ -34,8 +35,10 @@ typedef struct {
 		DisplayText disp;
 		InputText   input;
 	} io;
-	char *url, *src, *target, *text;
-	struct Lang *lang;
+	char  *url,
+	      *src,
+	      *target,
+	      *text;
 	cJSON *json;
 } Translate;
 
@@ -45,8 +48,8 @@ typedef struct {
 } Memory;
 
 /* function declaration, ordered in logical manner */
-static void        interactive_mode   (Translate *tr);
 static const char *get_lang           (const char *lcode);
+static void        interactive_mode   (Translate *tr);
 static void        run                (Translate *tr);
 static char       *url_parser         (Translate *tr, size_t len);
 static void        req_handler        (Memory *mem, CURL *curl, const char *url);
@@ -164,7 +167,7 @@ url_parser(Translate *tr, size_t len)
 				tr->src, tr->target, text_enc);
 		break;
 	case RAW:
-		/* because raw and full mode has the same url */
+		/* because raw and detail output has the same url */
 		/* FALLTHROUGH */
 	case DETAIL:
 		ret = snprintf(tr->url, len, URL_DETAIL,
@@ -504,7 +507,9 @@ main(int argc, char *argv[])
 		return 0;
 	}
 
-	Translate tr = {0};
+	Translate tr = {
+		.io.input = NORMAL
+	};
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		tr.io.disp = DETECT_LANG;
@@ -532,12 +537,15 @@ main(int argc, char *argv[])
 	tr.target = strtok(NULL,    ":");
 	tr.text   = argv[3] ? rtrim(ltrim(argv[3])) : NULL;
 
+#define LANG_ERR(X) \
+	fprintf(stderr, "Unknown \"%s\" language code\n", X);
+
 	if (get_lang(tr.src) == NULL) {
-		fprintf(stderr, "Unknown \"%s\" language code\n", tr.src);
+		LANG_ERR(tr.src);
 		goto err;
 	}
 	if (strcmp(tr.target, "auto") == 0 || get_lang(tr.target) == NULL) {
-		fprintf(stderr, "Unknown \"%s\" language code\n", tr.target);
+		LANG_ERR(tr.target);
 		goto err;
 	}
 
