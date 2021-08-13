@@ -34,27 +34,33 @@ sudo make uninstall
 ```
 moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 
--b = Brief mode (only show simple output).
--f = Full mode.
+-b = Brief output (only show simple output).
+-f = Full/detail output.
 -r = Raw output (json).
+-i = Interactive input mode.
 -d = Detect language.
 -h = Show help message.
 ```
 
 
-1. Brief mode:
+1. Brief output:
 	`moetranslate -b auto:id "Hello world\!"`
 
-	`auto`	-> automatic detection
+	`auto` -> automatic detection
 
-	`id`	-> Indonsian language code
-2. Full mode:
+	`id`   -> Indonsian language code
+2. Full/detail output:
 	`moetranslate -f en:id "Hello wrld\!"`
 
-	`en`	-> English language code
+	`en`   -> English language code
 
 	Will show translated WORD/SENTENCE with more information.
-3. Show help:
+3. Interactive input mode:
+	```
+	moetranslate -i -f en:ja
+	moetranslate -i -b auto:en
+	```
+4. Show help:
 	`moetranslate -h`
 
 ## Language Code:

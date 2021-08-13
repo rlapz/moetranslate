@@ -1,3 +1,10 @@
+/* MIT License
+ *
+ * Copyright (c) 2021 Arthur Lapz (rLapz)
+ *
+ * See LICENSE file for license details
+ */
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -9,6 +16,7 @@
 #include "cJSON.h"
 #include "util.h"
 
+/* macros */
 typedef enum {
 	NORMAL, INTERACTIVE, PIPE
 } InputText;
@@ -18,8 +26,7 @@ typedef enum {
 } DisplayText;
 
 struct Lang {
-	char *code,
-	     *value;
+	char *code, *value;
 };
 
 typedef struct {
@@ -27,8 +34,7 @@ typedef struct {
 		DisplayText disp;
 		InputText   input;
 	} io;
-	char *url;
-	char *src, *target, *text;
+	char *url, *src, *target, *text;
 	struct Lang *lang;
 	cJSON *json;
 } Translate;
@@ -52,9 +58,11 @@ static void        raw_output         (Translate *tr);
 static void        detect_lang_output (Translate *tr);
 static void        help               (FILE *in);
 
+/* config.h for applying patches and the configuration. */
 #include "config.h"
 
 
+/* function implementations */
 static void
 interactive_mode(Translate *tr)
 {
@@ -71,7 +79,7 @@ interactive_mode(Translate *tr)
 		printf("%s\n", "------------------------");
 
 		if (strlen(buffer) <= 1) {
-			puts("Exit...");
+			puts("Exiting...");
 			break;
 		}
 
@@ -91,23 +99,12 @@ run(Translate *tr)
 	Memory mem = {0};
 	CURL *curl;
 
-	tr->url = &url[0];
-	if (tr->src == NULL || tr->target == NULL)
-		return;
-
-	if (tr->io.input != INTERACTIVE && strlen(tr->text) >= TEXT_MAX_LEN)
-		return;
-
-	if (get_lang(tr->src) == NULL)
-		return;
-	if (strcmp(tr->target, "auto") == 0 || get_lang(tr->target) == NULL)
-		return;
-
 	curl = curl_easy_init();
 	if (curl == NULL)
 		DIE("run(): curl_easy_init()");
 
-	tr->url = url_parser(tr, sizeof(url));
+	tr->url = url;
+	url_parser(tr, sizeof(url));
 
 	req_handler(&mem, curl, tr->url);
 
@@ -487,7 +484,7 @@ help(FILE *out)
 		"       -f         Full/detail output\n"
 		"       -r         Raw output (json)\n"
 		"       -d         Detect language\n"
-		"       -i         Interactive input\n"
+		"       -i         Interactive input mode\n"
 		"       -h         Show this help\n\n"
 		"Examples:\n"
 		"   Brief Mode  :  moetranslate -b en:id \"Hello\"\n"
@@ -501,6 +498,7 @@ help(FILE *out)
 int
 main(int argc, char *argv[])
 {
+	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);
 		return 0;
@@ -514,7 +512,7 @@ main(int argc, char *argv[])
 	}
 
 	if (argc != 4)
-		return 1;
+		goto err;
 
 	if (strcmp(argv[1], "-i") == 0) {
 		argv += 1;
@@ -528,18 +526,37 @@ main(int argc, char *argv[])
 	else if (strcmp(argv[1], "-r") == 0)
 		tr.io.disp = RAW;
 	else
-		return 1;
+		goto err;
 
 	tr.src    = strtok(argv[2], ":");
 	tr.target = strtok(NULL,    ":");
 	tr.text   = argv[3] ? rtrim(ltrim(argv[3])) : NULL;
 
+	if (get_lang(tr.src) == NULL) {
+		fprintf(stderr, "Unknown \"%s\" language code\n", tr.src);
+		goto err;
+	}
+	if (strcmp(tr.target, "auto") == 0 || get_lang(tr.target) == NULL) {
+		fprintf(stderr, "Unknown \"%s\" language code\n", tr.target);
+		goto err;
+	}
+
 run_tr:
+	if (tr.io.input != INTERACTIVE && strlen(tr.text) >= TEXT_MAX_LEN) {
+		fprintf(stderr, "Text too long, MAX length: %d characters\n",
+				TEXT_MAX_LEN);
+		goto err;
+	}
+
 	if (tr.io.input == INTERACTIVE)
 		interactive_mode(&tr);
 	else
 		run(&tr);
 
-	return 0;
+	return EXIT_SUCCESS;
+
+err:
+	help(stderr);
+	return EXIT_FAILURE;
 }
 
