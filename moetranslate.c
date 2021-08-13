@@ -11,11 +11,11 @@
 
 typedef enum {
 	NORMAL, INTERACTIVE, PIPE
-} Input;
+} InputText;
 
 typedef enum {
 	BRIEF, DETAIL, RAW, DETECT_LANG 
-} Display;
+} DisplayText;
 
 struct Lang {
 	char *code,
@@ -23,10 +23,12 @@ struct Lang {
 };
 
 typedef struct {
-	Display disp;
-	Input   input;
-	char *src, *target, *text;
+	struct {
+		DisplayText disp;
+		InputText   input;
+	} io;
 	char *url;
+	char *src, *target, *text;
 	struct Lang *lang;
 	cJSON *json;
 } Translate;
@@ -37,23 +39,50 @@ typedef struct {
 } Memory;
 
 /* function declaration, ordered in logical manner */
-static void        interactive_mode(Translate *tr);
-////static void        pipe_mode(Translate *tr);
-
-static const char *get_lang(const char *lcode);
-static void        run(Translate *tr);
-static char       *url_parser(Translate *tr, size_t len);
-static void        req_handler(Memory *mem, CURL *curl, const char *url);
-static size_t      write_callback(char *p, size_t size, size_t nmemb, void *data);
-
+static void        interactive_mode   (Translate *tr);
+static const char *get_lang           (const char *lcode);
+static void        run                (Translate *tr);
+static char       *url_parser         (Translate *tr, size_t len);
+static void        req_handler        (Memory *mem, CURL *curl, const char *url);
+static size_t      write_callback     (char *p, size_t size, size_t nmemb,
+                                       void *data);
 static void        brief_output       (Translate *tr);
 static void        detail_output      (Translate *tr);
 static void        raw_output         (Translate *tr);
 static void        detect_lang_output (Translate *tr);
-
-static void        help(FILE *in);
+static void        help               (FILE *in);
 
 #include "config.h"
+
+
+static void
+interactive_mode(Translate *tr)
+{
+	printf(WHITE_BOLD_C
+		"Interactive input mode" END_C "\n"
+		"Max text length: %d\n\n", TEXT_MAX_LEN
+	);
+
+	char buffer[TEXT_MAX_LEN];
+
+	while (1) {
+		printf(WHITE_BOLD_C "Input text: " END_C);
+		fgets(buffer, TEXT_MAX_LEN, stdin);
+		printf("%s\n", "------------------------");
+
+		if (strlen(buffer) <= 1) {
+			puts("Exit...");
+			break;
+		}
+
+		putchar('\n');
+
+		buffer[strlen(buffer)-1] = '\0';
+		tr->text = buffer;
+		run(tr);
+		printf("%s\n", "------------------------");
+	}
+}
 
 static void
 run(Translate *tr)
@@ -66,7 +95,7 @@ run(Translate *tr)
 	if (tr->src == NULL || tr->target == NULL)
 		return;
 
-	if (tr->input != INTERACTIVE && strlen(tr->text) >= TEXT_MAX_LEN)
+	if (tr->io.input != INTERACTIVE && strlen(tr->text) >= TEXT_MAX_LEN)
 		return;
 
 	if (get_lang(tr->src) == NULL)
@@ -74,14 +103,21 @@ run(Translate *tr)
 	if (strcmp(tr->target, "auto") == 0 || get_lang(tr->target) == NULL)
 		return;
 
-	curl    = curl_easy_init();
+	curl = curl_easy_init();
+	if (curl == NULL)
+		DIE("run(): curl_easy_init()");
+
 	tr->url = url_parser(tr, sizeof(url));
 
 	req_handler(&mem, curl, tr->url);
 
 	tr->json = cJSON_Parse(mem.value);
+	if (tr->json == NULL) {
+		errno = EINVAL;
+		DIE("run(): cJSON_Parse(): Parsing error!");
+	}
 
-	switch (tr->disp) {
+	switch (tr->io.disp) {
 	case DETECT_LANG:
 		detect_lang_output(tr);
 		break;
@@ -122,7 +158,7 @@ url_parser(Translate *tr, size_t len)
 
 	url_encode(text_enc, (unsigned char *)tr->text, sizeof(text_enc));
 
-	switch (tr->disp) {
+	switch (tr->io.disp) {
 	case DETECT_LANG:
 		ret = snprintf(tr->url, len, URL_DETECT_LANG, text_enc);
 		break;
@@ -437,31 +473,6 @@ raw_output(Translate *tr)
 }
 
 static void
-interactive_mode(Translate *tr)
-{
-	printf(WHITE_BOLD_C
-		"Interactive input mode" END_C "\n"
-		"Max text length: %d\n\n", TEXT_MAX_LEN
-	);
-
-	char buffer[TEXT_MAX_LEN];
-
-	while (1) {
-		printf("Input text: ");
-		fgets(buffer, TEXT_MAX_LEN, stdin);
-
-		if (strlen(buffer) <= 1)
-			break;
-
-		buffer[strlen(buffer)-1] = '\0';
-		tr->text = buffer;
-		run(tr);
-	}
-
-	putchar('\n');
-}
-
-static void
 help(FILE *out)
 {
 	if (out == stderr) {
@@ -495,11 +506,10 @@ main(int argc, char *argv[])
 		return 0;
 	}
 
-	Display disp;
-	Input   input = NORMAL;
+	Translate tr = {0};
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
-		disp = DETECT_LANG;
+		tr.io.disp = DETECT_LANG;
 		goto run_tr;
 	}
 
@@ -508,28 +518,24 @@ main(int argc, char *argv[])
 
 	if (strcmp(argv[1], "-i") == 0) {
 		argv += 1;
-		input = INTERACTIVE;
+		tr.io.input = INTERACTIVE;
 	}
 
 	if (strcmp(argv[1], "-b") == 0)
-		disp = BRIEF;
+		tr.io.disp = BRIEF;
 	else if (strcmp(argv[1], "-f") == 0)
-		disp = DETAIL;
+		tr.io.disp = DETAIL;
 	else if (strcmp(argv[1], "-r") == 0)
-		disp = RAW;
+		tr.io.disp = RAW;
 	else
 		return 1;
 
-	Translate tr = {
-		.src    = strtok(argv[2], ":"),
-		.target = strtok(NULL,    ":"),
-		.text   = argv[3] ? rtrim(ltrim(argv[3])) : NULL,
-		.input  = input,
-		.disp   = disp,
-	};
+	tr.src    = strtok(argv[2], ":");
+	tr.target = strtok(NULL,    ":");
+	tr.text   = argv[3] ? rtrim(ltrim(argv[3])) : NULL;
 
 run_tr:
-	if (input == INTERACTIVE)
+	if (tr.io.input == INTERACTIVE)
 		interactive_mode(&tr);
 	else
 		run(&tr);
