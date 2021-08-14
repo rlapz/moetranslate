@@ -7,7 +7,7 @@
 # See LICENSE file for license details
 
 TARGET    = moetranslate
-VERSION   = 0.1.1
+VERSION   = 0.2.0
 
 PREFIX    = /usr
 CC        = cc
