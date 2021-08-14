@@ -7,6 +7,9 @@
 char *
 ltrim(const char *str)
 {
+	if (str == NULL)
+		return NULL;
+
 	while (*str && isspace((unsigned char)(*str)))
 		str++;
 	return (char*)str;
@@ -16,6 +19,9 @@ ltrim(const char *str)
 char *
 rtrim(char *str)
 {
+	if (str == NULL)
+		return NULL;
+
 	char *end = str + strlen(str) -1;
 	while (end > str && isspace((unsigned char)(*end))) {
 		*end = '\0';

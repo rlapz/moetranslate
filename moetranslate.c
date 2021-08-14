@@ -515,22 +515,21 @@ help(FILE *out)
 int
 main(int argc, char *argv[])
 {
+	Translate tr = { .io.input = NORMAL };
+
+
 	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);
 		return 0;
 	}
 
-	Translate tr = {
-		.io.input = NORMAL
-	};
-
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		tr.io.disp = DETECT_LANG;
 		goto run_tr;
 	}
 
-	if (argc != 4)
+	if (argc > 4)
 		goto err;
 
 	if (strcmp(argv[1], "-i") == 0) {
@@ -549,7 +548,7 @@ main(int argc, char *argv[])
 
 	tr.src    = strtok(argv[2], ":");
 	tr.target = strtok(NULL,    ":");
-	tr.text   = argv[3] ? rtrim(ltrim(argv[3])) : NULL;
+	tr.text   = rtrim(ltrim(argv[3]));
 
 #define LANG_ERR(X) \
 	fprintf(stderr, "Unknown \"%s\" language code\n", X);
@@ -558,6 +557,7 @@ main(int argc, char *argv[])
 		LANG_ERR(tr.src);
 		goto err;
 	}
+
 	if (strcmp(tr.target, "auto") == 0 || get_lang(tr.target) == NULL) {
 		LANG_ERR(tr.target);
 		goto err;
