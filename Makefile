@@ -41,7 +41,7 @@ util.o: util.c util.h
 	$(CC) $(CFLAGS) -c -o $(@) $(<)
 
 $(TARGET): $(OBJ)
-	@printf "\n%s\n" "Linking: $(^)..."
+	@printf "\n%s\n" "Linking: $(LDFLAGS) $(^)..."
 	$(CC) $(LDFLAGS) -o $(@) $(^)
 # ------------------------------------------------------------------- #
 

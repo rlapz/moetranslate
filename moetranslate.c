@@ -26,8 +26,8 @@ typedef enum {
 } DisplayText;
 
 struct Lang {
-	char *code,
-	     *value;
+	char   *code,
+	       *value;
 };
 
 typedef struct {
@@ -35,11 +35,11 @@ typedef struct {
 		DisplayText disp;
 		InputText   input;
 	} io;
-	char  *url,
-	      *src,
-	      *target,
-	      *text;
-	cJSON *json;
+	char   *url,
+	       *src,
+	       *target,
+	       *text;
+	cJSON  *json;
 } Translate;
 
 typedef struct {
@@ -51,10 +51,12 @@ typedef struct {
 static const char *get_lang           (const char *lcode);
 static void        interactive_mode   (Translate *tr);
 static void        run                (Translate *tr);
+
 static char       *url_parser         (Translate *tr, size_t len);
-static void        req_handler        (Memory *mem, CURL *curl, const char *url);
-static size_t      write_callback     (char *p, size_t size, size_t nmemb,
+static void        req_handler        (Memory *dest, CURL *curl, const char *url);
+static size_t      write_callback     (char *contents, size_t size, size_t nmemb,
                                        void *data);
+
 static void        brief_output       (Translate *tr);
 static void        detail_output      (Translate *tr);
 static void        raw_output         (Translate *tr);
@@ -69,28 +71,39 @@ static void        help               (FILE *in);
 static void
 interactive_mode(Translate *tr)
 {
-	printf(WHITE_BOLD_C
-		"Interactive input mode" END_C "\n"
-		"Max text length: %d\n\n", TEXT_MAX_LEN
-	);
-
 	char buffer[TEXT_MAX_LEN];
+
+	printf( WHITE_BOLD_C
+		"---[ Moetranslate ]---"
+		END_C
+		"\n"
+		YELLOW_BOLD_C
+		"Interactive input mode"
+		END_C
+
+		"\nMax text length: %d characters, see: config.h\n"
+		"Press Ctrl-d to exit.\n\n"
+		"------------------------\n",
+		TEXT_MAX_LEN
+	);
 
 	while (1) {
 		printf(WHITE_BOLD_C "Input text: " END_C);
-		fgets(buffer, TEXT_MAX_LEN, stdin);
-		printf("%s\n", "------------------------");
 
-		if (strlen(buffer) <= 1) {
-			puts("Exiting...");
+		if (fgets(buffer, TEXT_MAX_LEN, stdin) == NULL) {
+			puts("\nExiting...");
 			break;
 		}
+		if (strlen(rtrim(ltrim(buffer))) == 0)
+			continue;
 
-		putchar('\n');
+		printf("%s\n", "------------------------");
 
-		buffer[strlen(buffer)-1] = '\0';
-		tr->text = buffer;
+		buffer[strlen(buffer)] = '\0';
+		tr->text = rtrim(ltrim(buffer));
+
 		run(tr);
+
 		printf("%s\n", "------------------------");
 	}
 }
@@ -224,7 +237,7 @@ brief_output(Translate *tr)
 {
 	cJSON *i, *value;
 
-	cJSON_ArrayForEach(i, tr->json->child) {
+	cJSON_ArrayForEach(i, (tr->json)->child) {
 		value = i->child; /* index: 0 */
 		if (cJSON_IsString(value))
 			/* send the result to stdout */
@@ -239,7 +252,7 @@ detect_lang_output(Translate *tr)
 	/* faster than cJSON_GetArrayItem(result, 2)
 	 * (without iterations) but UNSAFE */ 
 	char  *lang_c;
-	cJSON *lang_src = tr->json->child->next->next;
+	cJSON *lang_src = (tr->json)->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
 		lang_c = lang_src->valuestring;
@@ -272,8 +285,9 @@ detail_output(Translate *tr)
 	    examples
 	 */
 
-	cJSON *result = tr->json;
-	cJSON *i; /* iterator  */
+	cJSON *i;                          /* iterator      */
+	cJSON *result         = tr->json;  /* temporary var */
+
 	cJSON *trans_text     = result->child;
 
 	cJSON *examples       = cJSON_GetArrayItem(result, 13),
@@ -551,7 +565,7 @@ main(int argc, char *argv[])
 
 run_tr:
 	if (tr.io.input != INTERACTIVE && strlen(tr.text) >= TEXT_MAX_LEN) {
-		fprintf(stderr, "Text too long, MAX length: %d characters\n",
+		fprintf(stderr, "Text too long, MAX length: %d characters, see: config.h\n",
 				TEXT_MAX_LEN);
 		goto err;
 	}
