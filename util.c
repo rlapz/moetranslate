@@ -1,5 +1,4 @@
 #include <ctype.h>
-#include <stdio.h>
 #include <string.h>
 
 #include "util.h"
@@ -50,7 +49,8 @@ trim_tag(char *dest, char tag)
 			break;
 		i++;
 	}
-	strncpy(p, tmp, j);
+
+	memcpy(p, tmp, j);
 	p[j] = '\0';
 }
 
@@ -71,6 +71,7 @@ url_encode(char *dest, const unsigned char *src, size_t len)
 		}
 		i++;
 	}
+
 	dest[pos] = '\0';
 
 	return dest;

@@ -5,43 +5,47 @@
  * See LICENSE file for license details
  */
 
-#define TEXT_MAX_LEN 2048   /* max input text length */
+/* DO WHATEVER YOU WANT! */
+
+#define TEXT_MAX_LEN         4096 /* max input text length */
+
+
+#define DEFINITION_MAX_LINE  -1   /* definition max lines, 0 = disable, -1 = show all */
+#define EXAMPLE_MAX_LINE     5    /* example max lines,    0 = disable, -1 = show all */
+#define SYNONYM_MAX_LINE     -1   /* synonym max lines,    0 = disable, -1 = show all */
+
+
+#define TIMEOUT              10   /* set request timeout (10s) */
+
+
+#define USER_AGENT           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) " \
+			     "AppleWebKit/537.31 (KHTML, like Gecko) "         \
+			     "Chrome/26.0.1410.65 Safari/537.31"               \
+
+
+#define BASE_URL             "https://translate.googleapis.com/translate_a/single?"
+
+#define URL_BRIEF            BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"
+
+#define URL_DETAIL           BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"                \
+	                              "dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&"               \
+                                      "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"
+
+#define URL_DETECT_LANG      BASE_URL "client=gtx&sl=auto&q=%s"
+
 
 /* colors */
-#define GREEN_C       "\033[00;32m"
-#define YELLOW_C      "\033[00;33m"
-#define GREEN_BOLD_C  "\033[01;32m"
-#define YELLOW_BOLD_C "\033[01;33m"
-#define BLUE_BOLD_C   "\033[01;34m"
-#define WHITE_BOLD_C  "\033[01;37m"
-#define END_C         "\033[00m"
+#define GREEN_C              "\033[00;32m"
+#define YELLOW_C             "\033[00;33m"
+#define GREEN_BOLD_C         "\033[01;32m"
+#define YELLOW_BOLD_C        "\033[01;33m"
+#define BLUE_BOLD_C          "\033[01;34m"
+#define WHITE_BOLD_C         "\033[01;37m"
+#define END_C                "\033[00m"
 
-
-static const int  definition_max_line = -1;  /* definition max lines, 0 = disable, -1 = show all */
-static const int  example_max_line    = 5;   /* example max lines,    0 = disable, -1 = show all */
-static const int  synonym_max_line    = -1;  /* synonym max lines,    0 = disable, -1 = show all */
-
-static const long timeout             = 10L; /* set request timeout (10s) */
-
-static const char user_agent[]        = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) "
-					"AppleWebKit/537.31 (KHTML, like Gecko) "
-					"Chrome/26.0.1410.65 Safari/537.31";
-
-static const Url  url_google          = {
-	"https://translate.googleapis.com/translate_a/single?",   /* base url              */
-	{
-		[BRIEF]  = "client=gtx&ie=UTF-8&oe=UTF-8&dt=t",   /* url parameter (brief) */
-		[FULL]   = "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"
-			   "dt=ex&dt=ld&dt=md&dt=rw&"
-			   "dt=rm&dt=ss&dt=t&dt=at&dt=gt&dt=qca", /* url parameter (full)  */
-		[RAW]	 = "",                                    /* raw and full mode has 
-								     the same url parameter */
-		[DETECT] = "client=gtx&sl=auto"
-	}
-};
 
 /* 17+1 109 */
-static const Language language[] = {
+static const struct Lang lang[] = {
 {"auto", "Automatic"},
 
 {"af" , "Afrikaans"   }, {"sq"   , "Albanian"           }, {"am"   , "Amharic"             },
