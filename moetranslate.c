@@ -94,13 +94,13 @@ interactive_mode(Translate *tr)
 			puts("\nExiting...");
 			break;
 		}
-		if (strlen(rtrim(ltrim(buffer))) == 0)
+
+		tr->text = rtrim(ltrim(buffer));
+
+		if (strlen(tr->text) == 0)
 			continue;
 
 		printf("%s\n", "------------------------");
-
-		buffer[strlen(buffer)] = '\0';
-		tr->text = rtrim(ltrim(buffer));
 
 		run(tr);
 
