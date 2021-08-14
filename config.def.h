@@ -35,14 +35,10 @@
 
 
 /* colors */
-#define GREEN_C              "\033[00;32m"
-#define YELLOW_C             "\033[00;33m"
-#define GREEN_BOLD_C         "\033[01;32m"
-#define YELLOW_BOLD_C        "\033[01;33m"
-#define BLUE_BOLD_C          "\033[01;34m"
-#define WHITE_BOLD_C         "\033[01;37m"
-#define END_C                "\033[00m"
-
+#define BLUE_COLOR           "34"
+#define GREEN_COLOR          "32"
+#define WHITE_COLOR          "37"
+#define YELLOW_COLOR         "33"
 
 /* 17+1 109 */
 static const struct Lang lang[] = {

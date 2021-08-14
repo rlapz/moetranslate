@@ -17,6 +17,9 @@
 #include "util.h"
 
 /* macros */
+#define PRINT_SEP_1()  puts("------------------------")
+#define PRINT_SEP_2()  printf("\n------------------------")
+
 typedef enum {
 	NORMAL, INTERACTIVE, PIPE
 } InputText;
@@ -66,6 +69,15 @@ static void        help               (FILE *in);
 /* config.h for applying patches and the configuration. */
 #include "config.h"
 
+/* color functions */
+#define REGULAR_GREEN(TEXT)  "\033[00;" GREEN_COLOR  "m" TEXT "\033[00m"
+#define REGULAR_YELLOW(TEXT) "\033[00;" YELLOW_COLOR "m" TEXT "\033[00m"
+
+#define BOLD_BLUE(TEXT)      "\033[01;" BLUE_COLOR   "m" TEXT "\033[00m"
+#define BOLD_GREEN(TEXT)     "\033[01;" GREEN_COLOR  "m" TEXT "\033[00m"
+#define BOLD_WHITE(TEXT)     "\033[01;" WHITE_COLOR  "m" TEXT "\033[00m"
+#define BOLD_YELLOW(TEXT)    "\033[01;" YELLOW_COLOR "m" TEXT "\033[00m"
+
 
 /* function implementations */
 static void
@@ -73,22 +85,19 @@ interactive_mode(Translate *tr)
 {
 	char buffer[TEXT_MAX_LEN];
 
-	printf( WHITE_BOLD_C
-		"---[ Moetranslate ]---"
-		END_C
+	printf( BOLD_WHITE("---[ Moetranslate ]---")
 		"\n"
-		YELLOW_BOLD_C
-		"Interactive input mode"
-		END_C
+		BOLD_YELLOW("Interactive input mode")
 
 		"\nMax text length: %d characters, see: config.h\n"
-		"Press Ctrl-d to exit.\n\n"
-		"------------------------\n",
+		"Press Ctrl-d to exit.\n\n",
 		TEXT_MAX_LEN
 	);
 
+	PRINT_SEP_1();
+
 	while (1) {
-		printf(WHITE_BOLD_C "Input text: " END_C);
+		printf(BOLD_WHITE("Input text: "));
 
 		if (fgets(buffer, TEXT_MAX_LEN, stdin) == NULL) {
 			puts("\nExiting...");
@@ -100,11 +109,11 @@ interactive_mode(Translate *tr)
 		if (strlen(tr->text) == 0)
 			continue;
 
-		printf("%s\n", "------------------------");
+		PRINT_SEP_1();
 
 		run(tr);
 
-		printf("%s\n", "------------------------");
+		PRINT_SEP_1();
 	}
 }
 
@@ -315,35 +324,35 @@ detail_output(Translate *tr)
 
 	/* correction */
 	if (cJSON_IsString(src_correction->child)) {
-		printf("\n" YELLOW_BOLD_C "Did you mean: " END_C
-			"\"%s\"" YELLOW_BOLD_C " ?\n\n" END_C,
+		printf("\n" BOLD_YELLOW("Did you mean: ")
+			"\"%s\"" BOLD_YELLOW(" ?") "\n\n",
 			src_correction->child->next->valuestring);
 	}
 
 	/* source spelling */
 	if (cJSON_IsString(src_spelling))
-		printf("( " YELLOW_C "%s" END_C " )\n", src_spelling->valuestring);
+		printf("( " REGULAR_YELLOW("%s") " )\n", src_spelling->valuestring);
 
 	/* source lang */
 	if (cJSON_IsString(src_lang)) {
-		printf(GREEN_C "[ %s ]:" END_C " %s\n\n",
+		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
 			src_lang->valuestring, get_lang(src_lang->valuestring));
 	}
 
 	/* target text */
 	cJSON_ArrayForEach(i, trans_text) {
 		if (cJSON_IsString(i->child))
-			printf(WHITE_BOLD_C "%s" END_C, i->child->valuestring);
+			printf(BOLD_WHITE("%s"), i->child->valuestring);
 	}
 
 	putchar('\n');
 
 	/* target spelling */
 	if (cJSON_IsString(tgt_spelling))
-		printf("( " YELLOW_C "%s" END_C " )\n", tgt_spelling->valuestring);
+		printf("( " REGULAR_YELLOW("%s") " )\n", tgt_spelling->valuestring);
 
 	/* target lang */
-	printf( GREEN_C "[ %s ]:" END_C " %s\n", tr->target, get_lang(tr->target));
+	printf(REGULAR_GREEN("[ %s ]:") " %s\n", tr->target, get_lang(tr->target));
 
 	putchar('\n');
 
@@ -351,7 +360,7 @@ detail_output(Translate *tr)
 	if (!cJSON_IsArray(synonyms) || SYNONYM_MAX_LINE == 0)
 		goto l_definitions;
 
-	printf("\n%s", "------------------------");
+	PRINT_SEP_2();
 
 	/* label */
 	char *syn_lbl_str,
@@ -365,7 +374,7 @@ detail_output(Translate *tr)
 		syn_lbl_str    = i->child->valuestring;
 		syn_lbl_str[0] = toupper(syn_lbl_str[0]);
 
-		printf("\n" BLUE_BOLD_C "[ %s ]" END_C, syn_lbl_str);
+		printf("\n" BOLD_BLUE("[ %s ]"), syn_lbl_str);
 
 		/* target alternatives */
 		cJSON_ArrayForEach(tgt_syn, cJSON_GetArrayItem(i, 2)) {
@@ -375,8 +384,8 @@ detail_output(Translate *tr)
 			tgt_syn_str = tgt_syn->child->valuestring;
 			tgt_syn_str[0] = toupper(tgt_syn_str[0]);
 
-			printf("\n" WHITE_BOLD_C "%d. %s:" END_C "\n\t"
-				YELLOW_C "-> " END_C, iter, tgt_syn_str);
+			printf("\n" BOLD_WHITE("%d. %s:") "\n\t"
+				BOLD_YELLOW("-> "), iter, tgt_syn_str);
 
 			/* source alternatives */
 			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(
@@ -404,7 +413,7 @@ l_definitions:
 	if (!cJSON_IsArray(definitions) || DEFINITION_MAX_LINE == 0)
 		goto l_example;
 
-	printf("\n%s", "------------------------");
+	PRINT_SEP_2();
 
 	char *def_lbl_str, /* label */
 	     *def_sub_str;
@@ -419,7 +428,7 @@ l_definitions:
 			continue;
 
 		def_lbl_str[0] = toupper(def_lbl_str[0]);
-		printf("\n" YELLOW_BOLD_C "[ %s ]" END_C, def_lbl_str);
+		printf("\n" BOLD_YELLOW("[ %s ]"), def_lbl_str);
 
 		cJSON_ArrayForEach(def_sub, cJSON_GetArrayItem(i, 1)) {
 			if (def_max == 0)
@@ -431,13 +440,13 @@ l_definitions:
 			def_sub_str    = def_sub->child->valuestring;
 			def_sub_str[0] = toupper(def_sub_str[0]);
 
-			printf("\n" WHITE_BOLD_C "%d. %s" END_C "\n\t", iter, def_sub_str);
+			printf("\n" BOLD_WHITE("%d. %s") "\n\t", iter, def_sub_str);
 
 			if (cJSON_IsString(def_val))
-				printf(YELLOW_C "->" END_C " %s ", def_val->valuestring);
+				printf(REGULAR_YELLOW("->") " %s ", def_val->valuestring);
 
 			if (cJSON_IsArray(def_oth) && cJSON_IsString(def_oth->child->child))
-				printf(GREEN_C "[ %s ]" END_C, def_oth->child->child->valuestring);
+				printf(REGULAR_GREEN("[ %s ]"), def_oth->child->child->valuestring);
 
 			iter++;
 			def_max--;
@@ -450,7 +459,8 @@ l_example:
 	if (!cJSON_IsArray(examples) || EXAMPLE_MAX_LINE == 0)
 		return; /* it's over */
 
-	printf("\n%s\n", "------------------------");
+	PRINT_SEP_2();
+	putchar('\n');
 
 	int  iter     = 1,
 	     expl_max = EXAMPLE_MAX_LINE;
@@ -463,11 +473,11 @@ l_example:
 			expl_str = expl_val->child->valuestring;
 
 			/* eliminating <b> ... </b> tags */
-			trim_tag(expl_str, 'b');
+			trim_tag(expl_str);
 
 			expl_str[0] = toupper(expl_str[0]);
 
-			printf("%d. " YELLOW_C "%s" END_C "\n", iter, expl_str);
+			printf("%d. " REGULAR_YELLOW("%s") "\n", iter, expl_str);
 
 			iter++;
 			expl_max--;
@@ -521,7 +531,7 @@ main(int argc, char *argv[])
 	/* dumb arg parser */
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
 		help(stdout);
-		return 0;
+		return EXIT_SUCCESS;
 	}
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
@@ -565,8 +575,8 @@ main(int argc, char *argv[])
 
 run_tr:
 	if (tr.io.input != INTERACTIVE && strlen(tr.text) >= TEXT_MAX_LEN) {
-		fprintf(stderr, "Text too long, MAX length: %d characters, see: config.h\n",
-				TEXT_MAX_LEN);
+		fprintf(stderr, "Text too long, MAX length: %d characters, "
+				"see: config.h\n", TEXT_MAX_LEN);
 		goto err;
 	}
 

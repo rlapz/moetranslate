@@ -31,22 +31,30 @@ rtrim(char *str)
 }
 
 /* trim html tag ( <b>...</b> ) */
-void
-trim_tag(char *dest, char tag)
+char *
+trim_tag(char *dest)
 {
 #define B_SIZE 256
-	char   *p = dest;
-	char   tmp[B_SIZE];
+	const char *hlist = "abiu";
+	char *p = dest;
+	char tmp[B_SIZE];
 	size_t i = 0, j = 0;
 
-	/* UNSAFE */
 	while (p[i] != '\0' && j < B_SIZE) {
-		if (p[i] == '<' && p[i+1] != '/' && p[i+1] == tag &&
-				p[i+2] == '>')
-			i += 3;
-		if (p[i] == '<' && p[i+1] == '/' && p[i+2] == tag &&
-			       	p[i+3] == '>')
-			i += 4;
+		const char *pl = hlist;
+
+		while (*pl) {
+			if (p[i] == '<' && p[i+1] != '/' && p[i+1] == *pl &&
+					p[i+2] == '>') {
+				i += 3;
+			}
+
+			if (p[i] == '<' && p[i+1] == '/' && p[i+2] == *pl &&
+					p[i+3] == '>') {
+				i += 4;
+			}
+			pl++;
+		}
 
 		tmp[j] = p[i];
 		j++;
@@ -58,6 +66,8 @@ trim_tag(char *dest, char tag)
 
 	memcpy(p, tmp, j);
 	p[j] = '\0';
+
+	return dest;
 }
 
 char *

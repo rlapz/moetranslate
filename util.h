@@ -15,6 +15,6 @@
 
 char *ltrim      (const char *str);
 char *rtrim      (char *str);
-void  trim_tag   (char *dest, char tag);
+char *trim_tag   (char *dest);
 char *url_encode (char *dest, const unsigned char *src, size_t len);
 
