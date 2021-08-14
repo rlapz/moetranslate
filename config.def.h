@@ -35,6 +35,7 @@
 
 
 /* colors */
+/* see: https://en.wikipedia.org/wiki/ANSI_escape_code */
 #define BLUE_COLOR           "34"
 #define GREEN_COLOR          "32"
 #define WHITE_COLOR          "37"
