@@ -15,10 +15,10 @@ CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer
 	    -D_POSIX_C_SOURCE=200809L -Os
 LDFLAGS   = -lcurl
 
-SRC       = moetranslate.c cJSON.c util.c
+SRC       = moetranslate.c lib/cJSON.c lib/util.c lib/linenoise.c
 OBJ       = ${SRC:.c=.o}
 
-FILE_DIST = README.md LICENSE Makefile config.h util.h cJSON.h $(SRC)
+FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h lib/
 # ------------------------------------------------------------------- #
 
 all: options $(TARGET)
@@ -29,6 +29,10 @@ config.h:
 	cp config.def.h $(@)
 
 moetranslate.o: $(TARGET).c
+	@printf "\n%s\n" "Compiling: $(<)..."
+	$(CC) $(CFLAGS) -c -o $(@) $(<)
+
+linenoise.o: linenoise.c linenoise.h
 	@printf "\n%s\n" "Compiling: $(<)..."
 	$(CC) $(CFLAGS) -c -o $(@) $(<)
 

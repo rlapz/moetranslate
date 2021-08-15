@@ -13,8 +13,9 @@
 
 #include <curl/curl.h>
 
-#include "cJSON.h"
-#include "util.h"
+#include "lib/cJSON.h"
+#include "lib/linenoise.h"
+#include "lib/util.h"
 
 /* macros */
 #define PRINT_SEP_1()  puts("------------------------")
@@ -28,20 +29,17 @@ typedef enum {
 	BRIEF, DETAIL, RAW, DETECT_LANG 
 } DisplayText;
 
-struct Lang {
-	char   *code,
-	       *value;
-};
+typedef struct {
+	char   *value[2];    /* code and language */
+} Lang;
 
 typedef struct {
+	char   *url, *text;
 	struct {
 		DisplayText disp;
-		InputText   input;
+		InputText input;
 	} io;
-	char   *url,
-	       *src,
-	       *target,
-	       *text;
+	const  Lang *lang[2]; /* source and target */
 	cJSON  *json;
 } Translate;
 
@@ -51,7 +49,8 @@ typedef struct {
 } Memory;
 
 /* function declaration, ordered in logical manner */
-static const char *get_lang           (const char *lcode);
+static const Lang *get_lang           (const char *lcode);
+static int         set_lang           (Translate *tr, char *lcodes);
 static void        interactive_mode   (Translate *tr);
 static void        run                (Translate *tr);
 
@@ -83,28 +82,51 @@ static void        help               (FILE *in);
 static void
 interactive_mode(Translate *tr)
 {
-	char buffer[TEXT_MAX_LEN];
-
 	printf( BOLD_WHITE("---[ Moetranslate ]---")
 		"\n"
 		BOLD_YELLOW("Interactive input mode")
-
-		"\nMax text length: %d characters, see: config.h\n"
-		"Press Ctrl-d to exit.\n\n",
-		TEXT_MAX_LEN
+		"\n"
+		"\nChange language: /c [SOURCE]:[TARGET]\n"
+		"Press Ctrl-d or type \"/q\" to exit.\n\n"
 	);
 
 	PRINT_SEP_1();
 
-	while (1) {
-		printf(BOLD_WHITE("Input text: "));
+	linenoiseHistoryLoad(HISTORY_FILE_NAME);
 
-		if (fgets(buffer, TEXT_MAX_LEN, stdin) == NULL) {
-			puts("\nExiting...");
+	char *p;
+	char *prompt = "[Input text] -> ";
+	while ((p = linenoise(prompt)) != NULL) {
+		linenoiseHistoryAdd(p);
+
+		if (strcmp(p, "/q") == 0) {
+			free(p);
 			break;
 		}
 
-		tr->text = rtrim(ltrim(buffer));
+		if (strncmp(p, "/c", 2) == 0) {
+			char *tmp = p;
+			tmp += 2;
+
+			if (set_lang(tr, tmp) < 0) {
+				perror(NULL);
+				continue;
+			}
+
+			printf("\nLanguage changed: "
+					REGULAR_GREEN("[%s]") " %s -> "
+					REGULAR_GREEN("[%s]") " %s\n\n",
+					tr->lang[0]->value[0],
+					tr->lang[0]->value[1],
+					tr->lang[1]->value[0],
+					tr->lang[1]->value[1]
+			);
+
+			free(p);
+			continue;
+		}
+
+		tr->text = rtrim(ltrim(p));
 
 		if (strlen(tr->text) == 0)
 			continue;
@@ -114,7 +136,10 @@ interactive_mode(Translate *tr)
 		run(tr);
 
 		PRINT_SEP_1();
+
+		free(p);
 	}
+	puts("\nExiting...");
 }
 
 static void
@@ -159,17 +184,54 @@ run(Translate *tr)
 	curl_easy_cleanup(curl);
 }
 
-static const char *
+static const Lang *
 get_lang(const char *lcode)
 {
 	size_t len = LENGTH(lang);
 
 	for (size_t i = 0; i < len; i++) {
-		if (strcmp(lcode, lang[i].code) == 0)
-			return lang[i].value;
+		if (strcmp(lcode, lang[i].value[0]) == 0)
+			return &lang[i];
 	}
 
 	return NULL;
+}
+
+static int
+set_lang(Translate *tr, char *lcodes)
+{
+#define LANG_ERR(X) \
+		fprintf(stderr, "Unknown \"%s\" language code.\n", X);
+
+	char *src    = strtok(lcodes, ":");
+	char *target = strtok(NULL,   ":");
+
+	if (src == NULL || target == NULL)
+		goto err;
+
+	src    = rtrim(ltrim(src));
+	target = rtrim(ltrim(target));
+
+	if (strcmp(target, "auto") == 0) {
+		LANG_ERR(target);
+		goto err;
+	}
+
+	if ((tr->lang[0] = get_lang(src)) == NULL) {
+		LANG_ERR(src);
+		goto err;
+	}
+
+	if ((tr->lang[1] = get_lang(target)) == NULL) {
+		LANG_ERR(target);
+		goto err;
+	}
+
+	return 0;
+
+err:
+	errno = EINVAL;
+	return -errno;
 }
 
 static char *
@@ -186,14 +248,16 @@ url_parser(Translate *tr, size_t len)
 		break;
 	case BRIEF:
 		ret = snprintf(tr->url, len, URL_BRIEF,
-				tr->src, tr->target, text_enc);
+				tr->lang[0]->value[0], tr->lang[1]->value[0],
+				text_enc);
 		break;
 	case RAW:
 		/* because raw and detail output has the same url */
 		/* FALLTHROUGH */
 	case DETAIL:
 		ret = snprintf(tr->url, len, URL_DETAIL,
-				tr->src, tr->target, tr->target, text_enc);
+				tr->lang[0]->value[0], tr->lang[1]->value[0],
+				tr->lang[1]->value[0], text_enc);
 		break;
 	};
 
@@ -265,7 +329,7 @@ detect_lang_output(Translate *tr)
 
 	if (cJSON_IsString(lang_src)) {
 		lang_c = lang_src->valuestring;
-		printf("%s (%s)\n", lang_c, get_lang(lang_c));
+		printf("%s (%s)\n", lang_c, get_lang(lang_c)->value[1]);
 	}
 }
 
@@ -336,7 +400,8 @@ detail_output(Translate *tr)
 	/* source lang */
 	if (cJSON_IsString(src_lang)) {
 		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
-			src_lang->valuestring, get_lang(src_lang->valuestring));
+			src_lang->valuestring,
+			get_lang(src_lang->valuestring)->value[1]);
 	}
 
 	/* target text */
@@ -352,7 +417,8 @@ detail_output(Translate *tr)
 		printf("( " REGULAR_YELLOW("%s") " )\n", tgt_spelling->valuestring);
 
 	/* target lang */
-	printf(REGULAR_GREEN("[ %s ]:") " %s\n", tr->target, get_lang(tr->target));
+	printf(REGULAR_GREEN("[ %s ]:") " %s\n", 
+			tr->lang[1]->value[0], tr->lang[1]->value[1]);
 
 	putchar('\n');
 
@@ -385,7 +451,7 @@ detail_output(Translate *tr)
 			tgt_syn_str[0] = toupper(tgt_syn_str[0]);
 
 			printf("\n" BOLD_WHITE("%d. %s:") "\n\t"
-				BOLD_YELLOW("-> "), iter, tgt_syn_str);
+				REGULAR_YELLOW("-> "), iter, tgt_syn_str);
 
 			/* source alternatives */
 			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(
@@ -536,10 +602,11 @@ main(int argc, char *argv[])
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
 		tr.io.disp = DETECT_LANG;
+		tr.text    = rtrim(ltrim(argv[2]));
 		goto run_tr;
 	}
 
-	if (argc > 4)
+	if (argc != 4)
 		goto err;
 
 	if (strcmp(argv[1], "-i") == 0) {
@@ -556,25 +623,14 @@ main(int argc, char *argv[])
 	else
 		goto err;
 
-	tr.src    = strtok(argv[2], ":");
-	tr.target = strtok(NULL,    ":");
-	tr.text   = rtrim(ltrim(argv[3]));
-
-#define LANG_ERR(X) \
-	fprintf(stderr, "Unknown \"%s\" language code\n", X);
-
-	if (get_lang(tr.src) == NULL) {
-		LANG_ERR(tr.src);
+	if (set_lang(&tr, argv[2]) < 0)
 		goto err;
-	}
 
-	if (strcmp(tr.target, "auto") == 0 || get_lang(tr.target) == NULL) {
-		LANG_ERR(tr.target);
-		goto err;
-	}
+	tr.text = rtrim(ltrim(argv[3]));
 
 run_tr:
-	if (tr.io.input != INTERACTIVE && strlen(tr.text) >= TEXT_MAX_LEN) {
+	if (tr.io.input != INTERACTIVE && 
+			strlen(tr.text) >= TEXT_MAX_LEN) {
 		fprintf(stderr, "Text too long, MAX length: %d characters, "
 				"see: config.h\n", TEXT_MAX_LEN);
 		goto err;
