@@ -128,8 +128,10 @@ interactive_mode(Translate *tr)
 
 		tr->text = rtrim(ltrim(p));
 
-		if (strlen(tr->text) == 0)
+		if (strlen(tr->text) == 0) {
+			free(p);
 			continue;
+		}
 
 		PRINT_SEP_1();
 
