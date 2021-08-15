@@ -82,13 +82,15 @@ static void        help               (FILE *in);
 static void
 interactive_mode(Translate *tr)
 {
-	printf( BOLD_WHITE("---[ Moetranslate ]---")
+	const char *help = BOLD_WHITE("---[ Moetranslate ]---")
 		"\n"
 		BOLD_YELLOW("Interactive input mode")
-		"\n"
-		"\nChange language: /c [SOURCE]:[TARGET]\n"
-		"Press Ctrl-d or type \"/q\" to exit.\n\n"
-	);
+		"\n\n"
+		"Change language: /c [SOURCE]:[TARGET]\n"
+		"Show help      : /h\n"
+		"Exit           : /q\n";
+
+	puts(help);
 
 	PRINT_SEP_1();
 
@@ -102,6 +104,14 @@ interactive_mode(Translate *tr)
 		if (strcmp(p, "/q") == 0) {
 			free(p);
 			break;
+		}
+
+		if (strcmp(p, "/h") == 0) {
+			PRINT_SEP_1();
+			puts(help);
+			PRINT_SEP_1();
+			free(p);
+			continue;
 		}
 
 		if (strncmp(p, "/c", 2) == 0) {
@@ -121,6 +131,7 @@ interactive_mode(Translate *tr)
 					tr->lang[1]->value[0],
 					tr->lang[1]->value[1]
 			);
+			PRINT_SEP_1();
 
 			free(p);
 			continue;
