@@ -23,11 +23,11 @@
 #define PRINT_SEP_2()  printf("\n------------------------")
 
 typedef enum {
-	NORMAL, INTERACTIVE, PIPE
+	NORMAL = 1, INTERACTIVE
 } InputMode;
 
 typedef enum {
-	BRIEF, DETAIL, RAW, DETECT_LANG
+	BRIEF = 1, DETAIL, RAW, DETECT_LANG
 } OutputMode;
 
 typedef struct {
@@ -53,21 +53,22 @@ typedef struct {
 
 
 /* function declaration, ordered in logical manner */
-static const Lang *get_lang         (const char *code);
-static int         set_lang         (Translate *tr, char *codes);
-static void        interactive_mode (Translate *tr);
-static void        run              (Translate *tr);
+static const Lang *get_lang            (const char *code);
+static const char *get_output_mode_str (OutputMode out);
+static int         set_lang            (Translate *tr, char *codes);
+static void        interactive_mode    (Translate *tr);
+static void        run                 (Translate *tr);
 
-static int         url_parser       (Translate *tr, size_t len);
-static void        req_handler      (Memory *dest, CURL *curl, const char *url);
-static size_t      write_callback   (char *contents, size_t size, size_t nmemb,
-                                     void *data);
+static int         url_parser          (Translate *tr, size_t len);
+static void        req_handler         (Memory *dest, CURL *curl, const char *url);
+static size_t      write_callback      (char *contents, size_t size, size_t nmemb,
+                                        void *data);
 
-static void        brief_output       (Translate *tr);
-static void        detail_output      (Translate *tr);
-static void        raw_output         (Translate *tr);
-static void        detect_lang_output (Translate *tr);
-static void        help               (FILE *in);
+static void        brief_output        (Translate *tr);
+static void        detail_output       (Translate *tr);
+static void        raw_output          (Translate *tr);
+static void        detect_lang_output  (Translate *tr);
+static void        help                (FILE *in);
 
 
 /* config.h for applying patches and the configuration. */
@@ -99,24 +100,30 @@ interactive_mode(Translate *tr)
 	char *p          = NULL,
 	     *tmp        = p;
 	const char *cmd  = "Input text: ";
-	const char *help = BOLD_WHITE("---[ Moetranslate ]---")
-		            "\n"
-			    BOLD_YELLOW("Interactive input mode")
-			    "\n\n"
-			    "/c [SOURCE]:[TARGET]  - Change language\n"
-			    "/o [mode]             - Output mode\n"
-			    "/h                    - Show this message\n"
-			    "/q                    - Quit\n";
 
-	puts(help);
+#define PRINT_HELP()  printf(BOLD_WHITE("----[ Moetranslate ]----")\
+		           "\n"\
+			   BOLD_YELLOW("Interactive input mode")\
+			   "\n\n"\
+			   "Lang        : [%s:%s]\n"\
+			   "Output mode : %s\n\n"\
+	                   "------------------------\n"\
+		           "/c [SOURCE]:[TARGET]\n"\
+			   "/o [OUTPUT]\n"\
+			   "/h\n"\
+			   "/q\n"\
+			   "------------------------\n",\
+			   tr->lang.src->code, tr->lang.target->code,\
+			   get_output_mode_str(tr->io.output)\
+		);
+
+	PRINT_HELP();
 
 	while (1) {
 		FREE_N(p); /* see: lib/util.h */
 
-		PRINT_SEP_1();
 		if ((p = linenoise(cmd)) == NULL)
 			break;
-		PRINT_SEP_1();
 
 		tmp = p;
 		linenoiseHistoryAdd(p);
@@ -124,7 +131,7 @@ interactive_mode(Translate *tr)
 		if (strcmp(p, "/q") == 0)
 			goto exit_l;
 		if (strcmp(p, "/h") == 0 || strcmp(p, "/") == 0) {
-			puts(help);
+			PRINT_HELP();
 			continue;
 		}
 		if (strncmp(p, "/c", 2) == 0) {
@@ -136,12 +143,20 @@ interactive_mode(Translate *tr)
 			PRINT_LANG_CH(tr->lang);
 			continue;
 		}
-		/*
 		if (strncmp(p, "/o", 2) == 0) {
+			if (strlen(rtrim(ltrim(tmp +2))) == 0)
+				continue;
 
+			OutputMode m = atoi(tmp +2);
+			if (get_output_mode_str(m) == NULL) {
+				errno = EINVAL;
+				perror(NULL);
+				continue;
+			}
+			tr->io.output = m;
+			printf("Mode output changed: %s\n", get_output_mode_str(m));
 			continue;
 		}
-		*/
 
 		if (strlen((tr->text = rtrim(ltrim(tmp)))) > 0)
 			run(tr);
@@ -149,6 +164,19 @@ interactive_mode(Translate *tr)
 
 exit_l:
 	FREE_N(p);
+}
+
+static const char *
+get_output_mode_str(OutputMode out)
+{
+	switch (out) {
+	case BRIEF:       return "Brief";
+	case DETAIL:      return "Detail";
+	case DETECT_LANG: return "Detect language";
+	case RAW:         return "Raw";
+	}
+
+	return NULL;
 }
 
 static void
@@ -600,6 +628,7 @@ int
 main(int argc, char *argv[])
 {
 	Translate tr = {
+		.io.output   = BRIEF,
 		.io.input    = NORMAL,
 		.lang.src    = get_lang(default_lang[0]), /* set default lang */
 		.lang.target = get_lang(default_lang[1])
@@ -610,11 +639,9 @@ main(int argc, char *argv[])
 		if (strcmp(argv[1], "-h") == 0) {
 			help(stdout);
 			return EXIT_SUCCESS;
-			/*
 		} else if (strcmp(argv[1], "-i") == 0) {
 			tr.io.input = INTERACTIVE;
 			goto run_tr;
-			*/
 		}
 	}
 
