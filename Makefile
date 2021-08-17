@@ -11,7 +11,7 @@ VERSION   = 0.2.0
 
 PREFIX    = /usr
 CC        = cc
-CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
+CFLAGS    = -g -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
 	    -D_POSIX_C_SOURCE=200809L -Os
 LDFLAGS   = -lcurl
 
