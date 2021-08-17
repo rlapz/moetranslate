@@ -106,22 +106,24 @@ interactive_mode(Translate *tr)
 			    "/c [SOURCE]:[TARGET]  - Change language\n"
 			    "/o [mode]             - Output mode\n"
 			    "/h                    - Show this message\n"
-		            "/q                    - Quit\n";
+			    "/q                    - Quit\n";
 
 	puts(help);
 
 	while (1) {
-		FREE_N(p); /* freeing if not null, see: lib/util.h */
+		FREE_N(p); /* see: lib/util.h */
 
+		PRINT_SEP_1();
 		if ((p = linenoise(cmd)) == NULL)
 			break;
+		PRINT_SEP_1();
 
 		tmp = p;
 		linenoiseHistoryAdd(p);
 
 		if (strcmp(p, "/q") == 0)
 			goto exit_l;
-		if (strcmp(p, "/h") == 0) {
+		if (strcmp(p, "/h") == 0 || strcmp(p, "/") == 0) {
 			puts(help);
 			continue;
 		}
@@ -205,7 +207,7 @@ get_lang(const char *code)
 			return &lang[i];
 	}
 
-	fprintf(stderr, "Unknown \"%s\" language code.\n", code);
+	fprintf(stderr, "Unknown \"%s\" language code\n", code);
 err:
 	errno = EINVAL;
 	return NULL;
