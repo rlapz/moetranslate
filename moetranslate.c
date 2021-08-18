@@ -53,11 +53,11 @@ typedef struct {
 
 
 /* function declaration, ordered in logical manner */
+static void        interactive_mode    (Translate *tr);
+static void        run                 (Translate *tr);
 static const Lang *get_lang            (const char *code);
 static const char *get_output_mode_str (OutputMode out);
 static int         set_lang            (Translate *tr, char *codes);
-static void        interactive_mode    (Translate *tr);
-static void        run                 (Translate *tr);
 
 static int         url_parser          (Translate *tr, size_t len);
 static void        req_handler         (Memory *dest, CURL *curl, const char *url);
@@ -91,33 +91,45 @@ interactive_mode(Translate *tr)
 {
 #define PRINT_LANG_CH(L)\
 	printf("\nLanguage changed: "             \
-                REGULAR_GREEN("[%s]") " %s -> "   \
-		REGULAR_GREEN("[%s]") " %s \n\n", \
-		L.src->code,    L.src->value,     \
-		L.target->code, L.target->value)  \
+                REGULAR_GREEN("[%s]") " -> "   \
+		REGULAR_GREEN("[%s]") " \n\n", \
+		L.src->code, L.target->code)  \
 
+
+#define PRINT_BANNER()\
+	printf(BOLD_WHITE("----[ Moetranslate ]----")\
+	        "\n"\
+	        BOLD_YELLOW("Interactive input mode")\
+	        "\n\n"\
+	        "Lang        : [%s:%s]\n"\
+	        "Output mode : %s\n"\
+		"Show help   : type /h\n\n"\
+	        "------------------------\n",\
+	        tr->lang.src->code, tr->lang.target->code,\
+	        get_output_mode_str(tr->io.output))
+
+#define PRINT_HELP()\
+	printf("------------------------\n"\
+	        "Change Language:\n"\
+	        " /c [SOURCE]:[TARGET]\n\n"\
+	        "Change Output Mode:\n"\
+	        " /o [OUTPUT]\n"\
+	        "     OUTPUT:\n"\
+                "      1 = Brief\n"\
+	        "      2 = Detail\n"\
+	        "      3 = Raw\n"\
+	        "      4 = Detect Language\n\n"\
+	        "Show Help:\n"\
+	        " /h\n\n"\
+	        "Quit:\n"\
+	        " /q\n"\
+	        "------------------------\n")\
+
+	PRINT_BANNER();
 
 	char *p          = NULL,
 	     *tmp        = p;
 	const char *cmd  = "Input text: ";
-
-#define PRINT_HELP()  printf(BOLD_WHITE("----[ Moetranslate ]----")\
-		           "\n"\
-			   BOLD_YELLOW("Interactive input mode")\
-			   "\n\n"\
-			   "Lang        : [%s:%s]\n"\
-			   "Output mode : %s\n\n"\
-	                   "------------------------\n"\
-		           "/c [SOURCE]:[TARGET]\n"\
-			   "/o [OUTPUT]\n"\
-			   "/h\n"\
-			   "/q\n"\
-			   "------------------------\n",\
-			   tr->lang.src->code, tr->lang.target->code,\
-			   get_output_mode_str(tr->io.output)\
-		);
-
-	PRINT_HELP();
 
 	while (1) {
 		FREE_N(p); /* see: lib/util.h */
@@ -130,53 +142,42 @@ interactive_mode(Translate *tr)
 
 		if (strcmp(p, "/q") == 0)
 			goto exit_l;
-		if (strcmp(p, "/h") == 0 || strcmp(p, "/") == 0) {
+		if (strcmp(p, "/h") == 0) {
 			PRINT_HELP();
 			continue;
 		}
 		if (strncmp(p, "/c", 2) == 0) {
-			if (set_lang(tr, tmp +2) < 0) {
-				perror(NULL);
-				continue;
-			}
+			if (set_lang(tr, tmp +2) < 0)
+				goto err;
 
 			PRINT_LANG_CH(tr->lang);
 			continue;
 		}
 		if (strncmp(p, "/o", 2) == 0) {
-			if (strlen(rtrim(ltrim(tmp +2))) == 0)
-				continue;
+			OutputMode m = strtol(tmp +2, NULL, 10);
+			if (get_output_mode_str(m) == NULL)
+				goto err;
 
-			OutputMode m = atoi(tmp +2);
-			if (get_output_mode_str(m) == NULL) {
-				errno = EINVAL;
-				perror(NULL);
-				continue;
-			}
 			tr->io.output = m;
-			printf("Mode output changed: %s\n", get_output_mode_str(m));
+			printf("\nMode output changed: %s\n\n",
+					get_output_mode_str(m));
+
 			continue;
 		}
 
+		/* let's go! */
 		if (strlen((tr->text = rtrim(ltrim(tmp)))) > 0)
 			run(tr);
+
+		continue;
+
+	err:
+		errno = EINVAL;
+		perror(NULL);
 	}
 
 exit_l:
 	FREE_N(p);
-}
-
-static const char *
-get_output_mode_str(OutputMode out)
-{
-	switch (out) {
-	case BRIEF:       return "Brief";
-	case DETAIL:      return "Detail";
-	case DETECT_LANG: return "Detect language";
-	case RAW:         return "Raw";
-	}
-
-	return NULL;
 }
 
 static void
@@ -238,6 +239,19 @@ get_lang(const char *code)
 	fprintf(stderr, "Unknown \"%s\" language code\n", code);
 err:
 	errno = EINVAL;
+	return NULL;
+}
+
+static const char *
+get_output_mode_str(OutputMode out)
+{
+	switch (out) {
+	case BRIEF:       return "Brief";
+	case DETAIL:      return "Detail";
+	case DETECT_LANG: return "Detect language";
+	case RAW:         return "Raw";
+	}
+
 	return NULL;
 }
 
@@ -633,7 +647,7 @@ int
 main(int argc, char *argv[])
 {
 	Translate tr = {
-		.io.output   = BRIEF,
+		.io.output   = default_mode,
 		.io.input    = NORMAL,
 		.lang.src    = get_lang(default_lang[0]), /* set default lang */
 		.lang.target = get_lang(default_lang[1])
