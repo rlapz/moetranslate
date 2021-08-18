@@ -109,8 +109,7 @@ interactive_mode(Translate *tr)
 	        get_output_mode_str(tr->io.output))
 
 #define PRINT_HELP()\
-	printf("------------------------\n"\
-	        "Change Language:\n"\
+	printf("Change Language:\n"\
 	        " /c [SOURCE]:[TARGET]\n\n"\
 	        "Change Output Mode:\n"\
 	        " /o [OUTPUT]\n"\
@@ -143,6 +142,7 @@ interactive_mode(Translate *tr)
 		if (strcmp(p, "/q") == 0)
 			goto exit_l;
 		if (strcmp(p, "/h") == 0) {
+			printf("\033[2J\033[H"); /* clear the screen */
 			PRINT_HELP();
 			continue;
 		}
