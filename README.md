@@ -57,7 +57,7 @@ moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 	Will show translated WORD/SENTENCE with more information.
 3. Interactive input mode:
 	```
-	moetranslate -i -f en:ja
+	moetranslate -i
 	moetranslate -i -b auto:en
 	```
 4. Show help:
