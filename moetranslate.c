@@ -17,30 +17,33 @@
 #include "lib/linenoise.h"
 #include "lib/util.h"
 
+
 /* macros */
 #define PRINT_SEP_1()  puts("------------------------")
 #define PRINT_SEP_2()  printf("\n------------------------")
 
 typedef enum {
-	NORMAL, INTERACTIVE, PIPE
-} InputText;
+	NORMAL = 1, INTERACTIVE
+} InputMode;
 
 typedef enum {
-	BRIEF, DETAIL, RAW, DETECT_LANG 
-} DisplayText;
+	BRIEF = 1, DETAIL, RAW, DETECT_LANG
+} OutputMode;
 
 typedef struct {
-	char   *value[2];    /* code and language */
+	char   *code, *value;
 } Lang;
 
 typedef struct {
 	char   *url, *text;
+	cJSON  *result;
 	struct {
-		DisplayText disp;
-		InputText input;
+		OutputMode output;
+		InputMode  input;
 	} io;
-	const  Lang *lang[2]; /* source and target */
-	cJSON  *json;
+	struct {
+		const Lang *src, *target;
+	} lang;
 } Translate;
 
 typedef struct {
@@ -48,25 +51,29 @@ typedef struct {
 	size_t  size;
 } Memory;
 
+
 /* function declaration, ordered in logical manner */
-static const Lang *get_lang           (const char *lcode);
-static int         set_lang           (Translate *tr, char *lcodes);
-static void        interactive_mode   (Translate *tr);
-static void        run                (Translate *tr);
+static void        interactive_mode    (Translate *tr);
+static void        run                 (Translate *tr);
+static const Lang *get_lang            (const char *code);
+static const char *get_output_mode_str (OutputMode out);
+static int         set_lang            (Translate *tr, char *codes);
 
-static char       *url_parser         (Translate *tr, size_t len);
-static void        req_handler        (Memory *dest, CURL *curl, const char *url);
-static size_t      write_callback     (char *contents, size_t size, size_t nmemb,
-                                       void *data);
+static int         url_parser          (Translate *tr, size_t len);
+static void        req_handler         (Memory *dest, CURL *curl, const char *url);
+static size_t      write_callback      (char *contents, size_t size, size_t nmemb,
+                                        void *data);
 
-static void        brief_output       (Translate *tr);
-static void        detail_output      (Translate *tr);
-static void        raw_output         (Translate *tr);
-static void        detect_lang_output (Translate *tr);
-static void        help               (FILE *in);
+static void        brief_output        (Translate *tr);
+static void        detail_output       (Translate *tr);
+static void        raw_output          (Translate *tr);
+static void        detect_lang_output  (Translate *tr);
+static void        help                (FILE *in);
+
 
 /* config.h for applying patches and the configuration. */
 #include "config.h"
+
 
 /* color functions */
 #define REGULAR_GREEN(TEXT)  "\033[00;" GREEN_COLOR  "m" TEXT "\033[00m"
@@ -82,82 +89,100 @@ static void        help               (FILE *in);
 static void
 interactive_mode(Translate *tr)
 {
-	const char *help = BOLD_WHITE("---[ Moetranslate ]---")
-		"\n"
-		BOLD_YELLOW("Interactive input mode")
-		"\n\n"
-		"Change language: /c [SOURCE]:[TARGET]\n"
-		"Show help      : /h\n"
-		"Exit           : /q\n";
+#define PRINT_LANG_CH(L)\
+	printf("\nLanguage changed: "             \
+                REGULAR_GREEN("[%s]") " -> "   \
+		REGULAR_GREEN("[%s]") " \n\n", \
+		L.src->code, L.target->code)  \
 
-	puts(help);
 
-	PRINT_SEP_1();
+#define PRINT_BANNER()\
+	printf(BOLD_WHITE("----[ Moetranslate ]----")\
+	        "\n"\
+	        BOLD_YELLOW("Interactive input mode")\
+	        "\n\n"\
+	        "Lang        : [%s:%s]\n"\
+	        "Output mode : %s\n"\
+		"Show help   : type /h\n\n"\
+	        "------------------------\n",\
+	        tr->lang.src->code, tr->lang.target->code,\
+	        get_output_mode_str(tr->io.output))
 
-	linenoiseHistoryLoad(HISTORY_FILE_NAME);
+#define PRINT_HELP()\
+	printf("Change Language:\n"\
+	        " /c [SOURCE]:[TARGET]\n\n"\
+	        "Change Output Mode:\n"\
+	        " /o [OUTPUT]\n"\
+	        "     OUTPUT:\n"\
+                "      1 = Brief\n"\
+	        "      2 = Detail\n"\
+	        "      3 = Raw\n"\
+	        "      4 = Detect Language\n\n"\
+	        "Show Help:\n"\
+	        " /h\n\n"\
+	        "Quit:\n"\
+	        " /q\n"\
+	        "------------------------\n")\
 
-	char *p;
-	char *prompt = "[Input text] -> ";
-	while ((p = linenoise(prompt)) != NULL) {
+	PRINT_BANNER();
+
+	char *p          = NULL,
+	     *tmp        = p;
+	const char *cmd  = "Input text: ";
+
+	while (1) {
+		FREE_N(p); /* see: lib/util.h */
+
+		if ((p = linenoise(cmd)) == NULL)
+			break;
+
+		tmp = p;
 		linenoiseHistoryAdd(p);
 
-		if (strcmp(p, "/q") == 0) {
-			free(p);
-			break;
-		}
-
+		if (strcmp(p, "/q") == 0)
+			goto exit_l;
 		if (strcmp(p, "/h") == 0) {
-			PRINT_SEP_1();
-			puts(help);
-			PRINT_SEP_1();
-			free(p);
+			printf("\033[2J\033[H"); /* clear the screen */
+			PRINT_HELP();
 			continue;
 		}
-
 		if (strncmp(p, "/c", 2) == 0) {
-			char *tmp = p;
-			tmp += 2;
+			if (set_lang(tr, tmp +2) < 0)
+				goto err;
 
-			if (set_lang(tr, tmp) < 0) {
-				perror(NULL);
-				continue;
-			}
+			PRINT_LANG_CH(tr->lang);
+			continue;
+		}
+		if (strncmp(p, "/o", 2) == 0) {
+			OutputMode m = strtol(tmp +2, NULL, 10);
+			if (get_output_mode_str(m) == NULL)
+				goto err;
 
-			printf("\nLanguage changed: "
-					REGULAR_GREEN("[%s]") " %s -> "
-					REGULAR_GREEN("[%s]") " %s\n\n",
-					tr->lang[0]->value[0],
-					tr->lang[0]->value[1],
-					tr->lang[1]->value[0],
-					tr->lang[1]->value[1]
-			);
-			PRINT_SEP_1();
+			tr->io.output = m;
+			printf("\nMode output changed: %s\n\n",
+					get_output_mode_str(m));
 
-			free(p);
 			continue;
 		}
 
-		tr->text = rtrim(ltrim(p));
+		/* let's go! */
+		if (strlen((tr->text = rtrim(ltrim(tmp)))) > 0)
+			run(tr);
 
-		if (strlen(tr->text) == 0) {
-			free(p);
-			continue;
-		}
+		continue;
 
-		PRINT_SEP_1();
-
-		run(tr);
-
-		PRINT_SEP_1();
-
-		free(p);
+	err:
+		errno = EINVAL;
+		perror(NULL);
 	}
-	puts("\nExiting...");
+
+exit_l:
+	FREE_N(p);
 }
 
 static void
 run(Translate *tr)
-{	
+{
 	char url[(TEXT_MAX_LEN *3) + sizeof(URL_DETAIL)]; /* longest url */
 	Memory mem = {0};
 	CURL *curl;
@@ -171,13 +196,12 @@ run(Translate *tr)
 
 	req_handler(&mem, curl, tr->url);
 
-	tr->json = cJSON_Parse(mem.value);
-	if (tr->json == NULL) {
+	if ((tr->result = cJSON_Parse(mem.value)) == NULL) {
 		errno = EINVAL;
 		DIE("run(): cJSON_Parse(): Parsing error!");
 	}
 
-	switch (tr->io.disp) {
+	switch (tr->io.output) {
 	case DETECT_LANG:
 		detect_lang_output(tr);
 		break;
@@ -193,52 +217,68 @@ run(Translate *tr)
 	}
 
 	free(mem.value);
-	cJSON_Delete(tr->json);
+	cJSON_Delete(tr->result);
 	curl_easy_cleanup(curl);
 }
 
 static const Lang *
-get_lang(const char *lcode)
+get_lang(const char *code)
 {
+	if (code == NULL) {
+		fputs("Language code cannot be NULL\n", stderr);
+		goto err;
+	}
+
 	size_t len = LENGTH(lang);
 
 	for (size_t i = 0; i < len; i++) {
-		if (strcmp(lcode, lang[i].value[0]) == 0)
+		if (strcmp(code, lang[i].code) == 0)
 			return &lang[i];
+	}
+
+	fprintf(stderr, "Unknown \"%s\" language code\n", code);
+err:
+	errno = EINVAL;
+	return NULL;
+}
+
+static const char *
+get_output_mode_str(OutputMode out)
+{
+	switch (out) {
+	case BRIEF:       return "Brief";
+	case DETAIL:      return "Detail";
+	case DETECT_LANG: return "Detect language";
+	case RAW:         return "Raw";
 	}
 
 	return NULL;
 }
 
 static int
-set_lang(Translate *tr, char *lcodes)
+set_lang(Translate *tr, char *codes)
 {
-#define LANG_ERR(X) \
-		fprintf(stderr, "Unknown \"%s\" language code.\n", X);
-
-	char *src    = strtok(lcodes, ":");
-	char *target = strtok(NULL,   ":");
-
-	if (src == NULL || target == NULL)
-		goto err;
+	char *src    = strtok(codes, ":");
+	char *target = strtok(NULL,  ":");
 
 	src    = rtrim(ltrim(src));
 	target = rtrim(ltrim(target));
 
+	if (src == NULL || target == NULL)
+		goto err;
 	if (strcmp(target, "auto") == 0) {
-		LANG_ERR(target);
+		fputs("Target language cannot be \"auto\"\n", stderr);
 		goto err;
 	}
 
-	if ((tr->lang[0] = get_lang(src)) == NULL) {
-		LANG_ERR(src);
+	const Lang *src_l, *target_l; 
+	if ((src_l = get_lang(src)) == NULL)
 		goto err;
-	}
+	if ((target_l = get_lang(target)) == NULL)
+		goto err;
 
-	if ((tr->lang[1] = get_lang(target)) == NULL) {
-		LANG_ERR(target);
-		goto err;
-	}
+	tr->lang.src    = src_l;
+	tr->lang.target = target_l;
 
 	return 0;
 
@@ -247,7 +287,7 @@ err:
 	return -errno;
 }
 
-static char *
+static int
 url_parser(Translate *tr, size_t len)
 {
 	int ret = -1;
@@ -255,13 +295,13 @@ url_parser(Translate *tr, size_t len)
 
 	url_encode(text_enc, (unsigned char *)tr->text, sizeof(text_enc));
 
-	switch (tr->io.disp) {
+	switch (tr->io.output) {
 	case DETECT_LANG:
 		ret = snprintf(tr->url, len, URL_DETECT_LANG, text_enc);
 		break;
 	case BRIEF:
 		ret = snprintf(tr->url, len, URL_BRIEF,
-				tr->lang[0]->value[0], tr->lang[1]->value[0],
+				tr->lang.src->code, tr->lang.target->code,
 				text_enc);
 		break;
 	case RAW:
@@ -269,15 +309,17 @@ url_parser(Translate *tr, size_t len)
 		/* FALLTHROUGH */
 	case DETAIL:
 		ret = snprintf(tr->url, len, URL_DETAIL,
-				tr->lang[0]->value[0], tr->lang[1]->value[0],
-				tr->lang[1]->value[0], text_enc);
+				tr->lang.src->code, tr->lang.target->code,
+				tr->lang.target->code, text_enc);
 		break;
 	};
 
-	if (ret < 0)
-		DIE("url_parser()");
+	if (ret < 0) {
+		errno = EINVAL;
+		return -errno;
+	}
 
-	return tr->url;
+	return 0;
 }
 
 static void
@@ -323,7 +365,7 @@ brief_output(Translate *tr)
 {
 	cJSON *i, *value;
 
-	cJSON_ArrayForEach(i, (tr->json)->child) {
+	cJSON_ArrayForEach(i, (tr->result)->child) {
 		value = i->child; /* index: 0 */
 		if (cJSON_IsString(value))
 			/* send the result to stdout */
@@ -338,11 +380,11 @@ detect_lang_output(Translate *tr)
 	/* faster than cJSON_GetArrayItem(result, 2)
 	 * (without iterations) but UNSAFE */ 
 	char  *lang_c;
-	cJSON *lang_src = (tr->json)->child->next->next;
+	cJSON *lang_src = (tr->result)->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
 		lang_c = lang_src->valuestring;
-		printf("%s (%s)\n", lang_c, get_lang(lang_c)->value[1]);
+		printf("%s (%s)\n", lang_c, get_lang(lang_c)->value);
 	}
 }
 
@@ -371,8 +413,8 @@ detail_output(Translate *tr)
 	    examples
 	 */
 
-	cJSON *i;                          /* iterator      */
-	cJSON *result         = tr->json;  /* temporary var */
+	cJSON *i;                            /* iterator      */
+	cJSON *result         = tr->result;  /* temporary var */
 
 	cJSON *trans_text     = result->child;
 
@@ -414,7 +456,7 @@ detail_output(Translate *tr)
 	if (cJSON_IsString(src_lang)) {
 		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
 			src_lang->valuestring,
-			get_lang(src_lang->valuestring)->value[1]);
+			get_lang(src_lang->valuestring)->value);
 	}
 
 	/* target text */
@@ -431,7 +473,7 @@ detail_output(Translate *tr)
 
 	/* target lang */
 	printf(REGULAR_GREEN("[ %s ]:") " %s\n", 
-			tr->lang[1]->value[0], tr->lang[1]->value[1]);
+			tr->lang.target->code, tr->lang.target->value);
 
 	putchar('\n');
 
@@ -568,7 +610,7 @@ l_example:
 static void
 raw_output(Translate *tr)
 {
-	char *out = cJSON_Print(tr->json);
+	char *out = cJSON_Print(tr->result);
 
 	puts(out);
 
@@ -604,18 +646,27 @@ help(FILE *out)
 int
 main(int argc, char *argv[])
 {
-	Translate tr = { .io.input = NORMAL };
-
+	Translate tr = {
+		.io.output   = default_mode,
+		.io.input    = NORMAL,
+		.lang.src    = get_lang(default_lang[0]), /* set default lang */
+		.lang.target = get_lang(default_lang[1])
+	};
 
 	/* dumb arg parser */
-	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
-		help(stdout);
-		return EXIT_SUCCESS;
+	if (argc == 2) {
+		if (strcmp(argv[1], "-h") == 0) {
+			help(stdout);
+			return EXIT_SUCCESS;
+		} else if (strcmp(argv[1], "-i") == 0) {
+			tr.io.input = INTERACTIVE;
+			goto run_tr;
+		}
 	}
 
 	if (argc == 3 && strcmp(argv[1], "-d") == 0) {
-		tr.io.disp = DETECT_LANG;
-		tr.text    = rtrim(ltrim(argv[2]));
+		tr.io.output = DETECT_LANG;
+		tr.text      = rtrim(ltrim(argv[2]));
 		goto run_tr;
 	}
 
@@ -628,11 +679,11 @@ main(int argc, char *argv[])
 	}
 
 	if (strcmp(argv[1], "-b") == 0)
-		tr.io.disp = BRIEF;
+		tr.io.output = BRIEF;
 	else if (strcmp(argv[1], "-f") == 0)
-		tr.io.disp = DETAIL;
+		tr.io.output = DETAIL;
 	else if (strcmp(argv[1], "-r") == 0)
-		tr.io.disp = RAW;
+		tr.io.output = RAW;
 	else
 		goto err;
 
@@ -660,4 +711,3 @@ err:
 	help(stderr);
 	return EXIT_FAILURE;
 }
-
