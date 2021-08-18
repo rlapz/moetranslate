@@ -256,10 +256,15 @@ set_lang(Translate *tr, char *codes)
 		fputs("Target language cannot be \"auto\"\n", stderr);
 		goto err;
 	}
-	if ((tr->lang.src = get_lang(src)) == NULL)
+
+	const Lang *src_l, *target_l; 
+	if ((src_l = get_lang(src)) == NULL)
 		goto err;
-	if ((tr->lang.target = get_lang(target)) == NULL)
+	if ((target_l = get_lang(target)) == NULL)
 		goto err;
+
+	tr->lang.src    = src_l;
+	tr->lang.target = target_l;
 
 	return 0;
 
