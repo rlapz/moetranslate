@@ -16,7 +16,7 @@ CFLAGS    = -g -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-poin
 LDFLAGS   = -lcurl
 
 SRC       = moetranslate.c lib/cJSON.c lib/util.c lib/linenoise.c
-OBJ       = ${SRC:.c=.o}
+OBJ       = $(SRC:.c=.o)
 
 FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h lib/
 # ------------------------------------------------------------------- #
@@ -59,7 +59,7 @@ clean:
 	@echo cleaning
 	rm -f $(OBJ) $(TARGET) config.h moetranslate*.tar.gz
 
-dist:
+dist: clean
 	@echo creating dist tarball
 	mkdir -p $(TARGET)-$(VERSION)
 	cp -R $(FILE_DIST) $(TARGET)-$(VERSION)
