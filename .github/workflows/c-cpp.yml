@@ -1,0 +1,20 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Install Depedencies
+      run: sudo apt update -y --fix-missing; sudo apt install -y libcurl4-openssl-dev gcc
+    - name: make
+      run: make
