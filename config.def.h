@@ -8,9 +8,9 @@
 /* DO WHATEVER YOU WANT! */
 
 /* interactive input mode */
-/*                                     source , target */
-static const char *default_lang[]   = { "auto", "en" };
-static enum OutputMode default_mode = DETAIL;
+/*                                           source , target */
+static const char *const default_lang[]   = { "auto", "en" };
+static enum OutputMode default_mode       = DETAIL;
 
 #define TEXT_MAX_LEN         4096                /* max input text length          */
 
