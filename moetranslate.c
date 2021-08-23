@@ -146,6 +146,8 @@ interactive_input(struct Translate *tr)
 	if (tr->text != NULL) {
 		run(tr);
 		puts("------------------------");
+
+		tr->text = NULL;
 	}
 
 	while (1) {
