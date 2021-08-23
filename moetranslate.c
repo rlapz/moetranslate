@@ -110,7 +110,7 @@ interactive_input(struct Translate *tr)
 	        "\n"                                       \
 	        BOLD_YELLOW("Interactive input mode")      \
 	        "\n\n"                                     \
-	        BOLD_WHITE("Lang        :") " [%s:%s]\n"   \
+	        BOLD_WHITE("Language    :") " [%s:%s]\n"   \
 	        BOLD_WHITE("Output mode :") " %s\n"        \
 		BOLD_WHITE("Show help   :") " Type /h\n\n" \
 	        "------------------------\n",              \
@@ -138,10 +138,10 @@ interactive_input(struct Translate *tr)
 	        " /q\n"                                    \
 	        "------------------------\n")
 
-	char *result = NULL, *tmp;
-	const char *cmd = "Input text: ";
 
 	PRINT_INFO();
+
+	char *result = NULL, *tmp;
 
 	if (tr->text != NULL) {
 		run(tr);
@@ -151,7 +151,7 @@ interactive_input(struct Translate *tr)
 	while (1) {
 		FREE_N(result); /* see: lib/util.h */
 
-		if ((result = linenoise(cmd)) == NULL)
+		if ((result = linenoise(PROMPT)) == NULL)
 			break;
 
 		tmp = result;
@@ -217,9 +217,26 @@ init(struct Translate *tr)
 	tr->url         = NULL;
 	tr->result      = NULL;
 	tr->io.input    = NORMAL;
-	tr->io.output   = default_mode;
-	tr->lang.src    = get_lang(default_lang[0]);
-	tr->lang.target = get_lang(default_lang[1]);
+
+	if (out_default_mode == 0 || out_default_mode >= LENGTH(output_str)) {
+		errno = EINVAL;
+		DIE("config.h: Unknown default output mode");
+	}
+
+	tr->io.output = out_default_mode;
+
+	if ((tr->lang.src = get_lang(default_lang[0])) == NULL) {
+		DIE("config.h");
+	}
+
+	if (strcmp(default_lang[1], "auto") == 0) {
+		errno = EINVAL;
+		DIE("Target language cannot be \"auto\"\nconfig.h");
+	}
+
+	if ((tr->lang.target = get_lang(default_lang[1])) == NULL) {
+		DIE("config.h");
+	}
 }
 
 static void
@@ -250,7 +267,7 @@ get_lang(const char *code)
 			return &lang[i];
 	}
 
-	fprintf(stderr, "Unkown \"%s\" language code\n", code);
+	fprintf(stderr, "Unknown \"%s\" language code\n", code);
 
 err:
 	errno = EINVAL;
@@ -678,7 +695,7 @@ main(int argc, char *argv[])
 			break;
 		case 'd':
 			tr.io.output = DETECT_LANG;
-			tr.text = rtrim(ltrim(argv[optind-1]));
+			tr.text      = rtrim(ltrim(argv[optind-1]));
 			break;
 		case 'r':
 			tr.io.output = RAW;
@@ -697,7 +714,7 @@ main(int argc, char *argv[])
 	}
 
 	if (tr.io.input == NORMAL && tr.text == NULL)
-			goto err;
+		goto err;
 
 	run_tr(&tr);
 

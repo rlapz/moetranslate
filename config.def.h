@@ -7,12 +7,19 @@
 
 /* DO WHATEVER YOU WANT! */
 
-/* interactive input mode */
-/*                                           source , target */
-static const char *const default_lang[]   = { "auto", "en" };
-static enum OutputMode default_mode       = DETAIL;
 
-#define TEXT_MAX_LEN         4096                /* max input text length          */
+/*** Interactive input mode configurations ***/
+/*********************************************/
+/* Output Mode: BRIEF, DETAIL, RAW, DETECT_LANG */
+/*                                               source , target */
+static const char *const     default_lang[]   = { "auto", "en" };
+static const enum OutputMode out_default_mode = DETAIL;
+#define PROMPT  "-> "  /* Prompt label */
+
+
+/*** Global configurations ***/
+/*****************************/
+#define TEXT_MAX_LEN         4096 /* max input text length          */
 
 #define DEFINITION_MAX_LINE  -1   /* definition max lines, 0 = disable, -1 = show all */
 #define EXAMPLE_MAX_LINE     5    /* example max lines,    0 = disable, -1 = show all */
