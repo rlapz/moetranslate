@@ -67,7 +67,7 @@ static const struct Lang lang[] = {
 {"fr" , "French"      }, {"fy"   , "Frisian"            }, {"gl"   , "Galician"            },
 {"ka" , "Georgian"    }, {"de"   , "German"             }, {"el"   , "Greek"               },
 {"gu" , "Gujarati"    }, {"ht"   , "Haitian Crole"      }, {"ha"   , "Hausan"              },
-{"haw", "Hawaiian"    }, {"he"   , "Hebrew"             }, {"hi"   , "Hindi"               },
+{"haw", "Hawaiian"    }, {"iw"   , "Hebrew"             }, {"hi"   , "Hindi"               },
 {"hmn", "Hmong"       }, {"hu"   , "Hungarian"          }, {"is"   , "Icelandic"           },
 {"ig" , "Igbo"        }, {"id"   , "Indonesian"         }, {"ga"   , "Irish"               },
 {"it" , "Italian"     }, {"ja"   , "Japanese"           }, {"jv"   , "Javanese"            },
