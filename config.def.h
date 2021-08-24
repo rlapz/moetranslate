@@ -74,7 +74,7 @@ static const struct Lang lang[] = {
 {"kn" , "Kannada"     }, {"kk"   , "Kazakh"             }, {"km"   , "Khmer"               },
 {"rw" , "Kinyarwanda" }, {"ko"   , "Korean"             }, {"ku"   , "Kurdish"             },
 {"ky" , "Kyrgyz"      }, {"lo"   , "Lao"                }, {"la"   , "Latin"               },
-{"la" , "Latvian"     }, {"lt"   , "Lithunian"          }, {"lb"   , "Luxembourgish"       },
+{"lv" , "Latvian"     }, {"lt"   , "Lithunian"          }, {"lb"   , "Luxembourgish"       },
 {"mk" , "Macedonian"  }, {"mg"   , "Malagasy"           }, {"ms"   , "Malay"               },
 {"ml" , "Malayam"     }, {"mt"   , "Maltese"            }, {"mi"   , "Maori"               },
 {"mr" , "Marathi"     }, {"mn"   , "Mongolian"          }, {"my"   , "Myanmar"             },

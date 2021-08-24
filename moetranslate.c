@@ -146,8 +146,6 @@ interactive_input(struct Translate *tr)
 	if (tr->text != NULL) {
 		run(tr);
 		puts("------------------------");
-
-		tr->text = NULL;
 	}
 
 	while (1) {
@@ -366,6 +364,7 @@ request_handler(struct Translate *tr)
 	if (ccode != CURLE_OK)
 		DIE_E("request_handler()", curl_easy_strerror(ccode));
 
+	tr->url  = NULL;
 	curl_easy_cleanup(curl);
 
 	return memory.value;
