@@ -29,7 +29,7 @@ enum OutputMode {
 };
 
 struct Lang {
-	char *code, *value;
+	const char *const code, *const value;
 };
 
 struct Memory {
