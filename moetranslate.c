@@ -27,10 +27,10 @@
 
 /* Command results for interactive input mode */
 typedef enum {
-	OK,
+	OK  ,
 	MISS,
 	EXIT,
-	ERR,
+	ERR ,
 } Intrc_cmd;
 
 typedef enum  {
@@ -45,7 +45,7 @@ typedef enum {
 } OutputMode;
 
 typedef struct {
-	char   *val;
+	char   *val ;
 	size_t  size;
 } Memory;
 
@@ -76,22 +76,17 @@ static int         inet_connect     (const char *addr, const char *port);
 static int         request_handler  (MoeTr *m);
 static int         response_handler (MoeTr *m);
 static Memory     *resize_memory    (Memory *mem, size_t size);
-
 static int         run              (MoeTr *m);
 static int         run_intrc        (MoeTr *m); // Interactive input
-
 static Intrc_cmd   intrc_parse_cmd  (MoeTr *m, const char *c);
-
 static void        raw              (MoeTr *m);
-
 static void        parse            (MoeTr *m);
 static void        parse_brief      (MoeTr *m, cJSON *p);
 static void        parse_detail     (MoeTr *m, cJSON *p);
 static void        parse_detect_lang(MoeTr *m, cJSON *p);
-
 static void        help             (void);
-static void        help_intrc       (void);
-static void        banner_intrc     (const MoeTr *m);
+static void        help_intrc       (const MoeTr *m);
+static void        info_intrc       (const MoeTr *m);
 
 
 /* config.h for applying patches and the configurations */
@@ -191,9 +186,6 @@ cleanup(MoeTr *m)
 static const Lang *
 get_lang(const char *code)
 {
-	if (code == NULL)
-		return NULL;
-
 	size_t len_lang = LENGTH(lang);
 	for (size_t i = 0; i < len_lang; i++) {
 		if (strcmp(code, lang[i].code) == 0)
@@ -402,7 +394,7 @@ response_handler(MoeTr *m)
 
 	m->result->val[b_total] = '\0';
 
-	/* Getting the content (JSON) */
+	/* Get the contents (JSON) */
 	if ((p = strstr(m->result->val, "\r\n")) == NULL)
 		return -1;
 
@@ -411,7 +403,7 @@ response_handler(MoeTr *m)
 	h_end  = p;
 	p      = m->result->val;
 
-	/* Check http status response */
+	/* Check http response status */
 	if ((p = strstr(p, "200")) == NULL)
 		return -1;
 
@@ -431,12 +423,13 @@ response_handler(MoeTr *m)
 	res     = p;
 	res_len = strlen(p);
 
-	if ((p = strstr(p, "\r\n")) == NULL)
+	if ((p = strstr(res, "\r\n")) == NULL)
 		return -1;
 
 	*p = '\0';
 
 	memmove(m->result->val, res, res_len);
+	m->result->val[res_len] = '\0';
 
 	return 0;
 }
@@ -485,9 +478,9 @@ run_intrc(MoeTr *m)
 	Intrc_cmd prs;
 	char *result = NULL, *tmp;
 
-	banner_intrc(m);
+	info_intrc(m);
 
-	/* Show the results immediately if text is not null */
+	/* Show the results immediately if the text is not null */
 	if (m->text != NULL) {
 		if (run(m) < 0)
 			goto exit_l;
@@ -537,7 +530,8 @@ intrc_parse_cmd(MoeTr *m, const char *c)
 		return EXIT;
 
 	} else if (strcmp(c, "/h") == 0) {
-		help_intrc();
+		help_intrc(m);
+
 		return OK;
 
 	} else if (strncmp(c, "/c", 2) == 0) {
@@ -893,21 +887,21 @@ help(void)
 
 
 static void
-help_intrc(void)
+help_intrc(const MoeTr *m)
 {
 	printf("------------------------\n"
-		BOLD_WHITE("Change Language:")
-		"\n"
+		BOLD_WHITE("Change the Languages:")
+		" -> [%s:%s]\n"
 	        " /c [SOURCE]:[TARGET]\n\n"
-		BOLD_WHITE("Result Type:")
-		"\n"
+		BOLD_WHITE("Result Type:         ")
+		" -> [%s]\n"
 		" /r [TYPE]\n"
 		"     TYPE:\n"
                 "      0 = Brief\n"
 	        "      1 = Detail\n"
 	        "      2 = Detect Language\n\n"
-	        BOLD_WHITE("Change Output Mode:")
-		"\n"
+	        BOLD_WHITE("Change Output Mode:  ")
+		" -> [%s]\n"
 	        " /o [OUTPUT]\n"
 	        "     OUTPUT:\n"
 		"      0 = Parse\n"
@@ -918,13 +912,17 @@ help_intrc(void)
 	        BOLD_WHITE("Quit:")
 		"\n"
 	        " /q\n"
-	        "------------------------\n"
+	        "------------------------\n",
+
+		m->lang_src->code, m->lang_trg->code,
+		result_type_str[m->result_type],
+		output_mode_str[m->output_mode]
 	);
 }
 
 
 static void
-banner_intrc(const MoeTr *m)
+info_intrc(const MoeTr *m)
 {
 	printf(BOLD_WHITE("----[ Moetranslate ]----")
 	        "\n"
@@ -935,6 +933,7 @@ banner_intrc(const MoeTr *m)
 	        BOLD_WHITE("Output mode :") " %s\n"
 		BOLD_WHITE("Show help   :") " Type /h\n\n"
 	        "------------------------\n",
+
 	        m->lang_src->code, m->lang_trg->code,
 		result_type_str[m->result_type],
 	        output_mode_str[m->output_mode]
@@ -951,8 +950,8 @@ main(int argc, char *argv[])
 	MoeTr m = { 0 };
 
 
-	if (argc <= 1 || strcmp(argv[1], "-") == 0)
-		goto err;
+	if (argc == 1)
+		goto einv0;
 
 	load_config_h(&m);
 
@@ -960,10 +959,16 @@ main(int argc, char *argv[])
 		switch (opt) {
 		case 'b':
 			m.result_type = BRIEF;
+			if (set_lang(&m, argv[optind -1]) < 0)
+				goto einv1;
+
 			break;
 
 		case 'f':
 			m.result_type = DETAIL;
+			if (set_lang(&m, argv[optind -1]) < 0)
+				goto einv1;
+
 			break;
 
 		case 'd':
@@ -984,40 +989,38 @@ main(int argc, char *argv[])
 			return EXIT_SUCCESS;
 
 		default:
-			errno = EINVAL;
-			goto err;
+			goto einv0;
 		}
 	}
 
 
-	if (is_detc) {
+	if (is_detc)
 		m.text = RLSKIP(argv[optind -1]);
 
-	} else if (optind < argc) {
+	else if (optind < argc)
 		m.text = RLSKIP(argv[optind]);
-		if (set_lang(&m, argv[optind -1]) < 0)
-			goto err;
 
-	} else if (!is_detc && !is_intrc) {
-		errno = EINVAL;
-
-		goto err;
-	}
 
 	if (is_intrc)
-		run_intrc(&m);
-	else
-		run(&m);
+		ret = run_intrc(&m);
+
+	else 
+		ret = run(&m);
+
 
 	if (ret < 0)
-		return EXIT_FAILURE;
+		goto err;
 
 	return EXIT_SUCCESS;
 
-err:
+einv0:
+	errno = EINVAL;
+
+einv1:
 	fprintf(stderr, "Moetranslate: %s!\n\n", strerror(errno));
 	help();
-	return EXIT_FAILURE;
 
+err:
+	return EXIT_FAILURE;
 }
 
