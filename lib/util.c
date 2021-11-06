@@ -5,34 +5,30 @@
 
 /* left trim */
 char *
-ltrim(const char *str)
+lskip(const char *str)
 {
-	if (str == NULL)
-		return NULL;
-
 	while (*str && isspace((unsigned char)(*str)))
 		str++;
+
 	return (char*)str;
 }
 
 /* right trim */
 char *
-rtrim(char *str)
+rskip(char *str)
 {
-	if (str == NULL)
-		return NULL;
-
 	char *end = str + strlen(str) -1;
-	while (end > str && isspace((unsigned char)(*end))) {
-		*end = '\0';
+	while (end > str && isspace((unsigned char)(*end)))
 		end--;
-	}
+
+	*(end+1) = '\0';
+
 	return str;
 }
 
 /* trim html tag ( <b>...</b> ) */
 char *
-trim_tag(char *dest)
+skip_html_tags(char *dest)
 {
 #define B_SIZE 256
 	const char *hlist = "abiu";
@@ -71,20 +67,22 @@ trim_tag(char *dest)
 }
 
 char *
-url_encode(char *dest, const unsigned char *src, size_t len)
+url_encode(char *dest, const char *src, size_t len)
 {
-	const char *hex = "0123456789abcdef";
-	size_t	    i  	= 0;
-	size_t	    pos	= 0;
+	const char *const hex  = "0123456789abcdef";
+	const unsigned char *p = (unsigned char *)src;
+	size_t i   = 0;
+	size_t pos = 0;
 
-	while (src[i] != '\0' && i < len) {
-		if (isalnum(src[i])) {
-			dest[pos++] = src[i];
+	while (p[i] != '\0' && i < len) {
+		if (isalnum(p[i])) {
+			dest[pos++] = p[i];
 		} else {
 			dest[pos++] = '%';
-			dest[pos++] = hex[src[i] >> 0x4];
-			dest[pos++] = hex[src[i] & 0xf];
+			dest[pos++] = hex[p[i] >> 4u];
+			dest[pos++] = hex[p[i] & 15u];
 		}
+
 		i++;
 	}
 

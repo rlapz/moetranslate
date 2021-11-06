@@ -13,7 +13,6 @@ PREFIX    = /usr
 CC        = cc
 CFLAGS    = -g -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
 	    -D_POSIX_C_SOURCE=200809L -Os
-LDFLAGS   = -lcurl
 
 SRC       = moetranslate.c lib/cJSON.c lib/util.c lib/linenoise.c
 OBJ       = $(SRC:.c=.o)
@@ -45,19 +44,18 @@ util.o: util.c util.h
 	$(CC) $(CFLAGS) -c -o $(@) $(<)
 
 $(TARGET): $(OBJ)
-	@printf "\n%s\n" "Linking: $(LDFLAGS) $(^)..."
-	$(CC) $(LDFLAGS) -o $(@) $(^)
+	@printf "\n%s\n" "Linking: $(^)..."
+	$(CC) -o $(@) $(^)
 # ------------------------------------------------------------------- #
 
 options:
 	@echo $(TARGET) build options:
 	@echo "CFLAGS"  = $(CFLAGS)
-	@echo "LDFLAGS" = $(LDFLAGS)
 	@echo "CC"      = $(CC)
 
 clean:
 	@echo cleaning
-	rm -f $(OBJ) $(TARGET) config.h moetranslate*.tar.gz
+	rm -f $(OBJ) $(TARGET) moetranslate*.tar.gz
 
 dist: clean
 	@echo creating dist tarball

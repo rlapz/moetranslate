@@ -5,74 +5,98 @@
  * See LICENSE file for license details
  */
 
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
+#include <unistd.h>
 
-#include <curl/curl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "lib/cJSON.h"
 #include "lib/linenoise.h"
 #include "lib/util.h"
 
 
-/* macros */
-enum InputMode {
-	NORMAL = 1, INTERACTIVE
-};
+#define RLSKIP(X) rskip(lskip(X))
 
-enum OutputMode {
-	BRIEF = 1, DETAIL, RAW, DETECT_LANG
-};
+/* Command results for interactive input mode */
+typedef enum {
+	OK,
+	MISS,
+	EXIT,
+	ERR,
+} Intrc_cmd;
 
-struct Lang {
-	const char *const code, *const value;
-};
+typedef enum  {
+	BRIEF   ,
+	DETAIL  ,
+	DET_LANG,
+} ResultType;
 
-struct Memory {
-	char *value;
-	size_t size;
-};
+typedef enum {
+	PARSE,
+	RAW  ,
+} OutputMode;
 
-struct Translate {
-	char *text, *url;
-	cJSON *result;
+typedef struct {
+	char   *val;
+	size_t  size;
+} Memory;
 
-	struct {
-		enum InputMode input;
-		enum OutputMode output;
-	} io;
+typedef struct {
+	const char *const code ;
+	const char *const value;
+} Lang;
 
-	struct {
-		const struct Lang *src, *target;
-	} lang;
-};
+typedef struct MoeTr {
+	ResultType  result_type;
+	OutputMode  output_mode;
+	int         sock_d     ;
+	const char *text       ;
+	char       *request    ;
+	Memory     *result     ;
+	const Lang *lang_src   ;
+	const Lang *lang_trg   ;
+} MoeTr;
 
 
-/* function declaration */
-static void init(struct Translate *tr);
-static void interactive_input(struct Translate *tr);
-static void run(struct Translate *tr);
-static const struct Lang *get_lang(const char *code);
-static int set_lang(struct Translate *tr, char *codes);
-static int url_parser(struct Translate *tr, const char *text_enc, size_t len);
-static char *request_handler(struct Translate *tr);
-static size_t write_callback(char *contents, size_t size, size_t nmemb, void *data);
+/* function declarations */
+static void        load_config_h    (MoeTr *m);
+static void        setup            (MoeTr *m);
+static void        cleanup          (MoeTr *m);
+static const Lang *get_lang         (const char *code);
+static int         set_lang         (MoeTr *m, const char *codes);
+static int         inet_connect     (const char *addr, const char *port);
+static int         request_handler  (MoeTr *m);
+static int         response_handler (MoeTr *m);
+static Memory     *resize_memory    (Memory *mem, size_t size);
 
-static void brief_output(struct Translate *tr);
-static void detail_output(struct Translate *tr);
-static void raw_output(struct Translate *tr);
-static void detail_output(struct Translate *tr);
-static void detect_lang_output(struct Translate *tr);
+static int         run              (MoeTr *m);
+static int         run_intrc        (MoeTr *m); // Interactive input
 
-static void help(void);
+static Intrc_cmd   intrc_parse_cmd  (MoeTr *m, const char *c);
+
+static void        raw              (MoeTr *m);
+
+static void        parse            (MoeTr *m);
+static void        parse_brief      (MoeTr *m, cJSON *p);
+static void        parse_detail     (MoeTr *m, cJSON *p);
+static void        parse_detect_lang(MoeTr *m, cJSON *p);
+
+static void        help             (void);
+static void        help_intrc       (void);
+static void        banner_intrc     (const MoeTr *m);
 
 
 /* config.h for applying patches and the configurations */
 #include "config.h"
+
 
 /* color functions */
 #define REGULAR_GREEN(TEXT)  "\033[00;" GREEN_COLOR  "m" TEXT "\033[00m"
@@ -83,329 +107,536 @@ static void help(void);
 #define BOLD_WHITE(TEXT)     "\033[01;" WHITE_COLOR  "m" TEXT "\033[00m"
 #define BOLD_YELLOW(TEXT)    "\033[01;" YELLOW_COLOR "m" TEXT "\033[00m"
 
-/* global variables */
 
-/* function array */
-static void (*const Func[])(struct Translate *) = {
-	[BRIEF]       = brief_output,
-	[DETAIL]      = detail_output,
-	[RAW]         = raw_output,
-	[DETECT_LANG] = detect_lang_output
+/* global variables */
+static const char *const result_type_str[] = {
+	[BRIEF]    = "Brief",
+	[DETAIL]   = "Detail",
+	[DET_LANG] = "Detect Language"
 };
 
-static const char *const output_str[] = {
-	[BRIEF]       = "Brief",
-	[DETAIL]      = "Detail",
-	[RAW]         = "Raw",
-	[DETECT_LANG] = "Detect Language"
+static const char *const output_mode_str[] = {
+	[PARSE] = "Parse",
+	[RAW]   = "Raw"
+};
+
+static void (*const run_func[])(MoeTr *) = {
+	[PARSE] = parse,
+	[RAW]   = raw
+};
+
+static void (*const parse_func[])(MoeTr *, cJSON *) = {
+	[BRIEF]    = parse_brief,
+	[DETAIL]   = parse_detail,
+	[DET_LANG] = parse_detect_lang
 };
 
 
 /* function implementations */
 static void
-interactive_input(struct Translate *tr)
+load_config_h(MoeTr *m)
 {
-#define PRINT_INFO()\
-	printf(BOLD_WHITE("----[ Moetranslate ]----")      \
-	        "\n"                                       \
-	        BOLD_YELLOW("Interactive input mode")      \
-	        "\n\n"                                     \
-	        BOLD_WHITE("Language    :") " [%s:%s]\n"   \
-	        BOLD_WHITE("Output mode :") " %s\n"        \
-		BOLD_WHITE("Show help   :") " Type /h\n\n" \
-	        "------------------------\n",              \
-	        tr->lang.src->code, tr->lang.target->code, \
-	        output_str[tr->io.output])
-
-#define PRINT_HELP()\
-	printf("------------------------\n"                \
-		BOLD_WHITE("Change Language:")             \
-		"\n"                                       \
-	        " /c [SOURCE]:[TARGET]\n\n"                \
-	        BOLD_WHITE("Change Output Mode:")          \
-		"\n"                                       \
-	        " /o [OUTPUT]\n"                           \
-	        "     OUTPUT:\n"                           \
-                "      1 = Brief\n"                        \
-	        "      2 = Detail\n"                       \
-	        "      3 = Raw\n"                          \
-	        "      4 = Detect Language\n\n"            \
-	        BOLD_WHITE("Show Help:")                   \
-		"\n"                                       \
-	        " /h\n\n"                                  \
-	        BOLD_WHITE("Quit:")                        \
-		"\n"                                       \
-	        " /q\n"                                    \
-	        "------------------------\n")
-
-
-	PRINT_INFO();
-
-	char *result = NULL, *tmp;
-
-	if (tr->text != NULL) {
-		run(tr);
-		puts("------------------------");
-	}
-
-	while (1) {
-		FREE_N(result); /* see: lib/util.h */
-
-		if ((result = linenoise(PROMPT)) == NULL)
-			break;
-
-		tmp = result;
-		linenoiseHistoryAdd(result);
-
-		if (strcmp(result, "/") == 0) {
-			PRINT_INFO();
-			continue;
-		}
-		if (strcmp(result, "/q") == 0)
-			goto exit_l;
-		if (strcmp(result, "/h") == 0) {
-			PRINT_HELP();
-			continue;
-		}
-		if (strncmp(result, "/c", 2) == 0) {
-			if (set_lang(tr, tmp +2) < 0)
-				goto err;
-			
-			printf("\nLanguage changed: "
-				REGULAR_GREEN("[%s]") " -> "
-				REGULAR_GREEN("[%s]") " \n\n",
-				tr->lang.src->code, tr->lang.target->code);
-
-			continue;
-		}
-		if (strncmp(result, "/o", 2) == 0) {
-			enum OutputMode m = atoi(result+2);
-			if (m == 0 || m >= LENGTH(output_str))
-				goto err;
-
-			tr->io.output = m;
-			printf("\nMode output changed: "
-				REGULAR_YELLOW("%s")
-				"\n\n",
-				output_str[m]);
-
-			continue;
-		}
-
-		/* let's go! */
-		if (strlen((tr->text = rtrim(ltrim(tmp)))) > 0) {
-			puts("------------------------");
-			run(tr);
-			puts("------------------------");
-		}
-
-		continue;
-
-	err:
+	if (default_output_mode < 0 || default_output_mode > RAW) {
 		errno = EINVAL;
-		perror(NULL);
+		DIE("setup(): config.h: default_output_mode");
 	}
 
-exit_l:
-	FREE_N(result);
+	if (default_result_type <= 0 || default_result_type > DET_LANG ) {
+		errno = EINVAL;
+		DIE("setup(): config.h: default_result_type");
+	}
+
+	if (set_lang(m, default_langs) < 0)
+		DIE("setup(): config.h: default_langs");
+
+	m->output_mode = default_output_mode;
+	m->result_type = default_result_type;
 }
+
 
 static void
-init(struct Translate *tr)
+setup(MoeTr *m)
 {
-	tr->text        = NULL;
-	tr->url         = NULL;
-	tr->result      = NULL;
-	tr->io.input    = NORMAL;
+	m->result = calloc(sizeof(Memory), sizeof(Memory));
+	if (m->result == NULL)
+		DIE("setup(): malloc");
 
-	if (out_default_mode == 0 || out_default_mode >= LENGTH(output_str)) {
-		errno = EINVAL;
-		DIE("config.h: Unknown default output mode");
-	}
+	m->result->size = sizeof(char) * BUFFER_SIZE;
+	m->result->val  = calloc(sizeof(char), m->result->size);
 
-	tr->io.output = out_default_mode;
+	if (m->result->val == NULL) {
+		cleanup(m);
 
-	if ((tr->lang.src = get_lang(default_lang[0])) == NULL) {
-		DIE("config.h");
-	}
-
-	if (strcmp(default_lang[1], "auto") == 0) {
-		errno = EINVAL;
-		DIE("Target language cannot be \"auto\"\nconfig.h");
-	}
-
-	if ((tr->lang.target = get_lang(default_lang[1])) == NULL) {
-		DIE("config.h");
+		DIE("setup(): malloc");
 	}
 }
+
 
 static void
-run(struct Translate *tr)
+cleanup(MoeTr *m)
 {
-	char *mem = request_handler(tr);
+	if (m->result != NULL) {
+		if (m->result->val != NULL) {
+			m->result->size = 0;
+			free(m->result->val);
+		}
 
-	if ((tr->result = cJSON_Parse(mem)) == NULL) {
-		errno = EINVAL;
-		DIE("run(): cJSON_Parse(): Parsing error!");
+		free(m->result);
 	}
 
-	Func[tr->io.output](tr);
-
-	free(mem);
-	cJSON_Delete(tr->result);
+	close(m->sock_d);
 }
 
-static const struct Lang *
+
+static const Lang *
 get_lang(const char *code)
 {
 	if (code == NULL)
-		goto err;
+		return NULL;
 
-	size_t len = LENGTH(lang);
-	for (size_t i = 0; i < len; i++) {
+	size_t len_lang = LENGTH(lang);
+	for (size_t i = 0; i < len_lang; i++) {
 		if (strcmp(code, lang[i].code) == 0)
 			return &lang[i];
 	}
 
-	fprintf(stderr, "Unknown \"%s\" language code\n", code);
-
-err:
 	errno = EINVAL;
 	return NULL;
 }
 
+
 static int
-set_lang(struct Translate *tr, char *codes)
+set_lang(MoeTr      *m,
+	 const char *codes)
 {
-	char *src    = strtok(codes, ":");
-	char *target = strtok(NULL,  ":");
+	const Lang *src_l, *trg_l;
+	char       *src, *trg, *p;
+	char        lcode[16];
+	size_t      len_codes;
 
-	src    = rtrim(ltrim(src));
-	target = rtrim(ltrim(target));
-
-	if (src == NULL || target == NULL) {
-		fputs("Invalid language format! ", stderr);
+	if ((len_codes = strlen(codes) +1) >= sizeof(lcode))
 		goto err;
-	}
-	if (strcmp(target, "auto") == 0) {
-		fputs("Target language cannot be \"auto\" ", stderr);
-		goto err;
-	}
 
-	const struct Lang *src_l, *target_l;
+	memcpy(lcode, codes, len_codes);
+
+	if ((p = strstr(lcode, ":")) == NULL)
+		goto err;
+
+	*p = '\0';
+	p++;
+
+	src = RLSKIP(lcode);
+	trg = RLSKIP(p);
+
+	if (*src == '\0' || *trg == '\0')
+		goto err;
+
+	if (strcmp(trg, "auto") == 0)
+		goto err;
+
 	if ((src_l = get_lang(src)) == NULL)
-		goto err;
-	if ((target_l = get_lang(target)) == NULL)
-		goto err;
+		return -1;
 
-	tr->lang.src    = src_l;
-	tr->lang.target = target_l;
+	if ((trg_l = get_lang(trg)) == NULL)
+		return -1;
+
+	m->lang_src = src_l;
+	m->lang_trg = trg_l;
 
 	return 0;
 
 err:
 	errno = EINVAL;
-	return -errno;
-}
-
-static int
-url_parser(struct Translate *tr, const char *text_enc, size_t len)
-{
-	switch (tr->io.output) {
-	case DETECT_LANG:
-		return snprintf(tr->url, len, URL_DETECT_LANG, text_enc);
-	case BRIEF:
-		return snprintf(tr->url, len, URL_BRIEF,
-				tr->lang.src->code, tr->lang.target->code,
-				text_enc);
-	case RAW:
-		/* because raw and detail output has the same url */
-		/* FALLTHROUGH */
-	case DETAIL:
-		return snprintf(tr->url, len, URL_DETAIL,
-				tr->lang.src->code, tr->lang.target->code,
-				tr->lang.target->code, text_enc);
-	}
-
 	return -1;
 }
 
-static char *
-request_handler(struct Translate *tr)
-{
-	char text_enc[TEXT_MAX_LEN *3];
-	char url[sizeof(text_enc) + sizeof(URL_DETAIL)]; /* longest url */
-	struct Memory memory = {0};
-	CURLcode ccode;
-	CURL *curl;
 
-	if (tr->text == NULL) {
-		errno = EINVAL;
-		DIE("request_handler(): text is NULL");
+static int
+inet_connect(const char *addr,
+	     const char *port)
+{
+	int fd = 0, ret;
+	struct addrinfo hints = { 0 }, *ai, *p = NULL;
+
+	if ((ret = getaddrinfo(addr, port, &hints, &ai)) != 0) {
+		fprintf(stderr, "inet_connect(): getaddrinfo: %s\n",
+			gai_strerror(ret)
+		);
+
+		return -1;
 	}
 
-	curl = curl_easy_init();
-	if (curl == NULL)
-		DIE("request_handler(): curl_easy_init()");
+	for (p = ai; p != NULL; p = p->ai_next) {
+		fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (fd < 0) {
+			perror("inet_connect(): socket");
 
-	url_encode(text_enc, (unsigned char *)tr->text, sizeof(text_enc));
+			continue;
+		}
 
-	tr->url = url;
-	if (url_parser(tr, text_enc, sizeof(url)) < 0)
-		DIE("request_handler(): url_parser()");
+		if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
+			perror("inet_connect(): connect");
+			close(fd);
 
-	curl_easy_setopt(curl, CURLOPT_URL, (char *)url);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, (struct Memory *)&memory);
-	curl_easy_setopt(curl, CURLOPT_USERAGENT, USER_AGENT);
-	curl_easy_setopt(curl, CURLOPT_TIMEOUT, TIMEOUT);
+			continue;
+		}
 
-	ccode = curl_easy_perform(curl);
-	if (ccode != CURLE_OK)
-		DIE_E("request_handler()", curl_easy_strerror(ccode));
+		break;
+	}
 
-	tr->url  = NULL;
-	curl_easy_cleanup(curl);
+	freeaddrinfo(ai);
 
-	return memory.value;
+	if (p == NULL) {
+		fprintf(stderr, "inet_connect(): Failed to connect\n");
+
+		return -1;
+	}
+
+	return fd;
 }
 
-/* https://curl.se/libcurl/c/CURLOPT_WRITEFUNCTION.html */
-static size_t
-write_callback(char *contents, size_t size, size_t nmemb, void *data)
+
+static int
+request_handler(MoeTr *m)
 {
-	char *ptr;
-	struct Memory *m = (struct Memory *)data;
-	size_t r_size    = (size * nmemb);
+#define TEXT_ENC_LEN   (TEXT_MAX_LEN * 3)
+#define BUFFER_REQ_LEN (sizeof(HTTP_REQUEST_DETAIL) + TEXT_ENC_LEN)
 
-	ptr = realloc(m->value, m->size + r_size +1);
-	if (ptr == NULL)
-		DIE("write_callback(): realloc");
+	char    enc_text[TEXT_ENC_LEN];
+	char    req_buff[BUFFER_REQ_LEN];
+	int     ret = -1;
 
-	memcpy(ptr + m->size, contents, r_size);
-	m->value = ptr;
-	m->size += r_size;
-	m->value[m->size] = '\0';
+	size_t  req_len;
+	size_t  text_len = strlen(m->text);
+	size_t  b_total  = 0;
+	ssize_t b_sent;
 
-	return r_size;
+
+	url_encode(enc_text, m->text, text_len);
+
+	switch (m->result_type) {
+	case BRIEF:
+		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_BRIEF,
+				m->lang_src->code,
+				m->lang_trg->code,
+				enc_text);
+		break;
+
+	case DETAIL:
+		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DETAIL,
+				m->lang_src->code,
+				m->lang_trg->code,
+				m->lang_trg->code,
+				enc_text);
+		break;
+
+	case DET_LANG:
+		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DET_LANG,
+				enc_text);
+		break;
+	}
+
+	if (ret < 0) {
+		perror("request_handler(): snprintf");
+
+		return -1;
+	}
+
+	req_len = strlen(req_buff);
+
+	while (b_total < req_len) {
+		if ((b_sent = send(m->sock_d, &req_buff[b_total],
+				   req_len - b_total, 0)) < 0) {
+			perror("request_handler(): send");
+
+			return -1;
+		}
+
+		if (b_sent == 0)
+			break;
+
+		b_total += (size_t)b_sent;
+	}
+
+	return 0;
 }
+
+
+static int
+response_handler(MoeTr *m)
+{
+	char    *p, *h_end, *res;
+	size_t   res_len;
+	size_t   b_total = 0;
+	ssize_t  b_sent;
+
+
+	while (1) {
+		if ((b_sent = recv(m->sock_d, &m->result->val[b_total],
+				   m->result->size - b_total, 0)) < 0) {
+			perror("response_handler(): recv");
+
+			return -1;
+		}
+
+		if (b_sent == 0)
+			break;
+
+		b_total += (size_t)b_sent;
+
+		if (b_total == m->result->size) {
+			Memory       *new;
+			const size_t  old_size = m->result->size;
+
+			new = resize_memory(m->result,
+					    old_size + (BUFFER_SIZE >> 1u));
+			if (new == NULL) {
+				perror("response_handler(): realloc");
+
+				return -1;
+			}
+
+			m->result = new;
+		}
+	}
+
+	m->result->val[b_total] = '\0';
+
+	/* Getting the content (JSON) */
+	if ((p = strstr(m->result->val, "\r\n")) == NULL)
+		return -1;
+
+	*p     = '\0';
+	p     += 2;
+	h_end  = p;
+	p      = m->result->val;
+
+	/* Check http status response */
+	if ((p = strstr(p, "200")) == NULL)
+		return -1;
+
+	p = strstr(h_end, "\r\n\r\n");
+	if (p == NULL)
+		return -1;
+
+	*p = '\0';
+
+	/* Skipping \r\n\r\n */
+	p += 4;
+
+	if ((p = strstr(p, "\r\n")) == NULL)
+		return -1;
+
+	p      += 2;
+	res     = p;
+	res_len = strlen(p);
+
+	if ((p = strstr(p, "\r\n")) == NULL)
+		return -1;
+
+	*p = '\0';
+
+	memmove(m->result->val, res, res_len);
+
+	return 0;
+}
+
+
+static Memory *
+resize_memory(Memory *mem, size_t size)
+{
+	char *p = realloc(mem->val, mem->size + size);
+	if (p == NULL)
+		return NULL;
+
+	mem->val   = p;
+	mem->size += size;
+
+	return mem;
+}
+
+
+static int
+run(MoeTr *m)
+{
+	setup(m);
+
+	if ((m->sock_d = inet_connect(URL, "80")) < 0)
+		return -1;
+
+	if (request_handler(m) < 0)
+		return -1;
+
+	if (response_handler(m) < 0)
+		return -1;
+
+
+	run_func[m->output_mode](m);
+
+	cleanup(m);
+
+	return 0;
+}
+
+
+static int
+run_intrc(MoeTr *m)
+{
+	Intrc_cmd prs;
+	char *result = NULL, *tmp;
+
+	banner_intrc(m);
+
+	/* Show the results immediately if text is not null */
+	if (m->text != NULL) {
+		if (run(m) < 0)
+			goto exit_l;
+		puts("------------------------\n");
+	}
+
+	while (1) {
+		if ((result = linenoise(PROMPT_LABEL)) == NULL)
+			break;
+
+		tmp = result;
+		linenoiseHistoryAdd(result);
+
+		prs = intrc_parse_cmd(m, tmp);
+
+		if (prs == EXIT)
+			goto exit_l;
+
+		if (prs == OK || prs == ERR)
+			goto free_res;
+
+		/* let's go! */
+		if (strlen((m->text = RLSKIP(tmp))) > 0) {
+			puts("------------------------\n");
+			if (run(m) < 0)
+				goto exit_l;
+			puts("------------------------\n");
+		}
+
+	free_res:
+		free(result);
+	}
+
+exit_l:
+	free(result);
+	return 0;
+}
+
+
+static Intrc_cmd
+intrc_parse_cmd(MoeTr *m, const char *c)
+{
+	if (strncmp(c, "/", 1) != 0)
+		return MISS;
+
+	if (strcmp(c, "/q") == 0) {
+		return EXIT;
+
+	} else if (strcmp(c, "/h") == 0) {
+		help_intrc();
+		return OK;
+
+	} else if (strncmp(c, "/c", 2) == 0) {
+		if (set_lang(m, c +2) < 0)
+			goto err;
+
+		printf("\nLanguage changed: "
+			REGULAR_GREEN("[%s]") " -> "
+			REGULAR_GREEN("[%s]") " \n\n",
+			m->lang_src->code, m->lang_trg->code
+		);
+
+		return OK;
+
+	} else if (strncmp(c, "/o", 2) == 0) {
+		OutputMode d = atoi(c +2);
+
+		switch (d) {
+		case PARSE: m->output_mode = PARSE; break;
+		case RAW:   m->output_mode = RAW  ; break;
+		default:    goto err;
+		}
+
+		printf("\nMode output changed: "
+			REGULAR_YELLOW("%s")
+			"\n\n",
+			output_mode_str[d]
+		);
+
+		return OK;
+
+	} else if (strncmp(c, "/r", 2) == 0) {
+		ResultType r = atoi(c +2);
+
+		switch (r) {
+		case BRIEF:    m->result_type = BRIEF   ; break;
+		case DETAIL:   m->result_type = DETAIL  ; break;
+		case DET_LANG: m->result_type = DET_LANG; break;
+		default:       goto err;
+		}
+
+		printf("\nResult type changed: "
+			REGULAR_YELLOW("%s")
+			"\n\n",
+			result_type_str[r]
+		);
+
+		return OK;
+	}
+
+err:
+	errno = EINVAL;
+	perror("> ");
+
+	return ERR;
+}
+
 
 static void
-brief_output(struct Translate *tr)
+raw(MoeTr *m)
 {
-	cJSON *i, *value;
+	puts(m->result->val);
+}
 
-	cJSON_ArrayForEach(i, (tr->result)->child) {
-		value = i->child; /* index: 0 */
-		if (cJSON_IsString(value))
-			/* send the result to stdout */
-			printf("%s", value->valuestring);
+
+static void
+parse(MoeTr *m)
+{
+	cJSON *p = cJSON_Parse(m->result->val);
+
+	if (p == NULL)
+		return;
+
+	parse_func[m->result_type](m, p);
+
+	cJSON_Delete(p);
+}
+
+
+static void
+parse_brief(MoeTr *m, cJSON *p)
+{
+	(void)m;
+
+	cJSON *i, *val;
+
+	cJSON_ArrayForEach(i, p->child) {
+		val = i->child;
+
+		if (cJSON_IsString(val))
+			printf("%s", val->valuestring);
 	}
+
 	putchar('\n');
 }
 
+
 static void
-detail_output(struct Translate *tr)
+parse_detail(MoeTr *m, cJSON *p)
 {
 	/*
 	   source text 
@@ -429,8 +660,8 @@ detail_output(struct Translate *tr)
 	    examples
 	 */
 
-	cJSON *i;                            /* iterator      */
-	cJSON *result         = tr->result;  /* temporary var */
+	cJSON *i;                   /* iterator      */
+	cJSON *result         = p;  /* temporary var */
 
 	cJSON *trans_text     = result->child;
 
@@ -455,7 +686,7 @@ detail_output(struct Translate *tr)
 
 
 	/* source text */
-	printf("\"%s\"\n", tr->text);
+	printf("\"%s\"\n", m->text);
 
 	/* correction */
 	if (cJSON_IsString(src_correction->child)) {
@@ -489,7 +720,7 @@ detail_output(struct Translate *tr)
 
 	/* target lang */
 	printf(REGULAR_GREEN("[ %s ]:") " %s\n", 
-			tr->lang.target->code, tr->lang.target->value);
+			m->lang_trg->code, m->lang_trg->value);
 
 	putchar('\n');
 
@@ -610,7 +841,7 @@ l_example:
 			expl_str = expl_val->child->valuestring;
 
 			/* eliminating <b> ... </b> tags */
-			trim_tag(expl_str);
+			skip_html_tags(expl_str);
 
 			expl_str[0] = toupper(expl_str[0]);
 
@@ -623,29 +854,21 @@ l_example:
 	}
 }
 
-static void
-raw_output(struct Translate *tr)
-{
-	char *out = cJSON_Print(tr->result);
-
-	puts(out);
-
-	free(out);
-}
 
 static void
-detect_lang_output(struct Translate *tr)
+parse_detect_lang(MoeTr *m, cJSON *p)
 {
-	/* faster than cJSON_GetArrayItem(result, 2)
-	 * (without iterations) but UNSAFE */ 
+	(void)m;
+
 	char  *lang_c;
-	cJSON *lang_src = (tr->result)->child->next->next;
+	cJSON *lang_src = p->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
 		lang_c = lang_src->valuestring;
 		printf("%s (%s)\n", lang_c, get_lang(lang_c)->value);
 	}
 }
+
 
 static void
 help(void)
@@ -669,62 +892,132 @@ help(void)
 }
 
 
+static void
+help_intrc(void)
+{
+	printf("------------------------\n"
+		BOLD_WHITE("Change Language:")
+		"\n"
+	        " /c [SOURCE]:[TARGET]\n\n"
+		BOLD_WHITE("Result Type:")
+		"\n"
+		" /r [TYPE]\n"
+		"     TYPE:\n"
+                "      0 = Brief\n"
+	        "      1 = Detail\n"
+	        "      2 = Detect Language\n\n"
+	        BOLD_WHITE("Change Output Mode:")
+		"\n"
+	        " /o [OUTPUT]\n"
+	        "     OUTPUT:\n"
+		"      0 = Parse\n"
+		"      1 = Raw\n\n"
+	        BOLD_WHITE("Show Help:")
+		"\n"
+	        " /h\n\n"
+	        BOLD_WHITE("Quit:")
+		"\n"
+	        " /q\n"
+	        "------------------------\n"
+	);
+}
+
+
+static void
+banner_intrc(const MoeTr *m)
+{
+	printf(BOLD_WHITE("----[ Moetranslate ]----")
+	        "\n"
+	        BOLD_YELLOW("Interactive input mode")
+	        "\n\n"
+	        BOLD_WHITE("Language    :") " [%s:%s]\n"
+	        BOLD_WHITE("Result type :") " %s\n"
+	        BOLD_WHITE("Output mode :") " %s\n"
+		BOLD_WHITE("Show help   :") " Type /h\n\n"
+	        "------------------------\n",
+	        m->lang_src->code, m->lang_trg->code,
+		result_type_str[m->result_type],
+	        output_mode_str[m->output_mode]
+	);
+}
+
+
+
 int
 main(int argc, char *argv[])
 {
-	int opt;
-	struct Translate tr;
-	void (*run_tr)(struct Translate *) = run;
+	int   opt, ret = 0;
+	bool  is_intrc = false, is_detc = false;
+	MoeTr m = { 0 };
+
 
 	if (argc <= 1 || strcmp(argv[1], "-") == 0)
 		goto err;
 
-	init(&tr);
+	load_config_h(&m);
 
-	/* EXPERIMENTAL */
-	while ((opt = getopt(argc, argv, "b:f:d:r:ih")) != -1) {
+	while ((opt = getopt(argc, argv, "b:f:d:rih")) != -1) {
 		switch (opt) {
 		case 'b':
-			tr.io.output = BRIEF;
-			tr.text      = rtrim(ltrim(argv[optind]));
-			set_lang(&tr, argv[optind-1]);
+			m.result_type = BRIEF;
 			break;
+
 		case 'f':
-			tr.io.output = DETAIL;
-			tr.text      = rtrim(ltrim(argv[optind]));
-			set_lang(&tr, argv[optind-1]);
+			m.result_type = DETAIL;
 			break;
+
 		case 'd':
-			tr.io.output = DETECT_LANG;
-			tr.text      = rtrim(ltrim(argv[optind-1]));
+			m.result_type = DET_LANG;
+			is_detc       = true;
 			break;
+
 		case 'r':
-			tr.io.output = RAW;
-			tr.text      = rtrim(ltrim(argv[optind]));
-			set_lang(&tr, argv[optind-1]);
+			m.output_mode = RAW;
 			break;
+
 		case 'i':
-			tr.io.input = INTERACTIVE;
-			run_tr      = interactive_input;
+			is_intrc = true;
 			break;
+
 		case 'h':
-			/* FALLTHROUGH */
+			help();
+			return EXIT_SUCCESS;
+
 		default:
+			errno = EINVAL;
 			goto err;
 		}
 	}
 
-	if (tr.io.input == NORMAL && tr.text == NULL)
-		goto err;
 
-	run_tr(&tr);
+	if (is_detc) {
+		m.text = RLSKIP(argv[optind -1]);
+
+	} else if (optind < argc) {
+		m.text = RLSKIP(argv[optind]);
+		if (set_lang(&m, argv[optind -1]) < 0)
+			goto err;
+
+	} else if (!is_detc && !is_intrc) {
+		errno = EINVAL;
+
+		goto err;
+	}
+
+	if (is_intrc)
+		run_intrc(&m);
+	else
+		run(&m);
+
+	if (ret < 0)
+		return EXIT_FAILURE;
 
 	return EXIT_SUCCESS;
 
 err:
-	errno = EINVAL;
-	perror(NULL);
+	fprintf(stderr, "Moetranslate: %s!\n\n", strerror(errno));
 	help();
 	return EXIT_FAILURE;
+
 }
 

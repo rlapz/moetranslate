@@ -5,55 +5,59 @@
  * See LICENSE file for license details
  */
 
-/* DO WHATEVER YOU WANT! */
+
+/* Output Mode : PARSE, RAW                                 */
+/* Result Type : BRIEF, DETAIL, DETECT_LANG                 */
+/* ...........................................source:target */
+static const char *const default_langs       = "auto:en";
+static const ResultType  default_result_type = DETAIL   ;
+static const OutputMode  default_output_mode = PARSE    ;
 
 
-/*** Interactive input mode configurations ***/
-/*********************************************/
-/* Output Mode: BRIEF, DETAIL, RAW, DETECT_LANG */
-/*                                               source , target */
-static const char *const     default_lang[]   = { "auto", "en" };
-static const enum OutputMode out_default_mode = DETAIL;
-#define PROMPT  "-> "  /* Prompt label */
+#define PROMPT_LABEL          "-> " /* Prompt label                                     */
+#define BUFFER_SIZE           4096u /* Buffer size (growable)                           */
+#define TEXT_MAX_LEN          4096u /* Max input text length                            */
+#define DEFINITION_MAX_LINE   -1    /* Definition max lines, 0 = disable, -1 = show all */
+#define EXAMPLE_MAX_LINE      5     /* Example max lines,    0 = disable, -1 = show all */
+#define SYNONYM_MAX_LINE      -1    /* Synonym max lines,    0 = disable, -1 = show all */
 
 
-/*** Global configurations ***/
-/*****************************/
-#define TEXT_MAX_LEN         4096 /* max input text length          */
+#define URL                   "translate.googleapis.com" /* Without https://  */
+#define P_BRIEF               "/translate_a/single?client=gtx&ie=UTF-8&"            \
+			      "oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"
+#define P_DETAIL              "/translate_a/single?client=gtx&ie=UTF-8&"            \
+			      "oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&" \
+                              "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"
+#define P_DETECT_LANG         "/translate_a/single?client=gtx&sl=auto&q=%s"
 
-#define DEFINITION_MAX_LINE  -1   /* definition max lines, 0 = disable, -1 = show all */
-#define EXAMPLE_MAX_LINE     5    /* example max lines,    0 = disable, -1 = show all */
-#define SYNONYM_MAX_LINE     -1   /* synonym max lines,    0 = disable, -1 = show all */
+#define USER_AGENT            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) "\
+			      "AppleWebKit/537.31 (KHTML, like Gecko) "        \
+			      "Chrome/26.0.1410.65 Safari/537.31"
 
+#define HTTP_REQUEST_BRIEF    "GET " P_BRIEF " HTTP/1.1\r\n"                   \
+			      "Host: " URL "\r\n"                              \
+			      "User-Agent: " USER_AGENT "\r\n"                 \
+			      "Connection: Close\r\n\r\n"
 
-#define TIMEOUT              10   /* set request timeout (10s) */
+#define HTTP_REQUEST_DETAIL   "GET " P_DETAIL " HTTP/1.1\r\n"                  \
+			      "Host: " URL "\r\n"                              \
+			      "User-Agent: " USER_AGENT "\r\n"                 \
+			      "Connection: Close\r\n\r\n"
 
+#define HTTP_REQUEST_DET_LANG "GET " P_DETECT_LANG " HTTP/1.1\r\n"             \
+			      "Host: " URL "\r\n"                              \
+			      "User-Agent: " USER_AGENT "\r\n"                 \
+			      "Connection: Close\r\n\r\n"
 
-#define USER_AGENT           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) " \
-			     "AppleWebKit/537.31 (KHTML, like Gecko) "         \
-			     "Chrome/26.0.1410.65 Safari/537.31"               \
-
-
-#define BASE_URL             "https://translate.googleapis.com/translate_a/single?"
-
-#define URL_BRIEF            BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"
-
-#define URL_DETAIL           BASE_URL "client=gtx&ie=UTF-8&oe=UTF-8&dt=bd&"                \
-	                              "dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss&"               \
-                                      "dt=t&dt=at&dt=gt&dt=qca&sl=%s&tl=%s&hl=%s&q=%s"
-
-#define URL_DETECT_LANG      BASE_URL "client=gtx&sl=auto&q=%s"
-
-
-/* colors */
-/* see: https://en.wikipedia.org/wiki/ANSI_escape_code */
+/* Colors */
+/* See: https://en.wikipedia.org/wiki/ANSI_escape_code */
 #define BLUE_COLOR           "34"
 #define GREEN_COLOR          "32"
 #define WHITE_COLOR          "37"
 #define YELLOW_COLOR         "33"
 
 /* 17+1 109 */
-static const struct Lang lang[] = {
+static const Lang lang[] = {
 {"auto", "Automatic"},
 
 {"af" , "Afrikaans"   }, {"sq"   , "Albanian"           }, {"am"   , "Amharic"             },

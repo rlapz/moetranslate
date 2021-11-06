@@ -12,11 +12,9 @@
 
 #define LENGTH(X) (sizeof(X) / sizeof(X[0]))
 
-#define FREE_N(X) if (X != NULL) free(X)
 
-
-char *ltrim      (const char *str);
-char *rtrim      (char *str);
-char *trim_tag   (char *dest);
-char *url_encode (char *dest, const unsigned char *src, size_t len);
+char *lskip         (const char *str);
+char *rskip         (char *str);
+char *skip_html_tags(char *dest);
+char *url_encode    (char *dest, const char *src, size_t len);
 
