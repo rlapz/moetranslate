@@ -67,26 +67,26 @@ typedef struct MoeTr {
 
 
 /* function declarations */
-static void        load_config_h    (MoeTr *m);
-static void        setup            (MoeTr *m);
-static void        cleanup          (MoeTr *m);
+static void        load_config_h    (MoeTr *moe);
+static void        setup            (MoeTr *moe);
+static void        cleanup          (MoeTr *moe);
 static const Lang *get_lang         (const char *code);
-static int         set_lang         (MoeTr *m, const char *codes);
+static int         set_lang         (MoeTr *moe, const char *codes);
 static int         inet_connect     (const char *addr, const char *port);
-static int         request_handler  (MoeTr *m);
-static int         response_handler (MoeTr *m);
+static int         request_handler  (MoeTr *moe);
+static int         response_handler (MoeTr *moe);
 static Memory     *resize_memory    (Memory *mem, size_t size);
-static int         run              (MoeTr *m);
-static int         run_intrc        (MoeTr *m); // Interactive input
-static Intrc_cmd   intrc_parse_cmd  (MoeTr *m, const char *c);
-static void        raw              (MoeTr *m);
-static void        parse            (MoeTr *m);
-static void        parse_brief      (MoeTr *m, cJSON *p);
-static void        parse_detail     (MoeTr *m, cJSON *p);
-static void        parse_detect_lang(MoeTr *m, cJSON *p);
+static int         run              (MoeTr *moe);
+static int         run_intrc        (MoeTr *moe); // Interactive input
+static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
+static void        raw              (MoeTr *moe);
+static void        parse            (MoeTr *moe);
+static void        parse_brief      (MoeTr *moe, cJSON *json);
+static void        parse_detail     (MoeTr *moe, cJSON *json);
+static void        parse_detect_lang(MoeTr *moe, cJSON *json);
 static void        help             (void);
-static void        help_intrc       (const MoeTr *m);
-static void        info_intrc       (const MoeTr *m);
+static void        help_intrc       (const MoeTr *moe);
+static void        info_intrc       (const MoeTr *moe);
 
 
 /* config.h for applying patches and the configurations */
@@ -129,7 +129,7 @@ static void (*const parse_func[])(MoeTr *, cJSON *) = {
 
 /* function implementations */
 static void
-load_config_h(MoeTr *m)
+load_config_h(MoeTr *moe)
 {
 	if (default_output_mode < 0 || default_output_mode > RAW) {
 		errno = EINVAL;
@@ -141,26 +141,26 @@ load_config_h(MoeTr *m)
 		DIE("setup(): config.h: default_result_type");
 	}
 
-	if (set_lang(m, default_langs) < 0)
+	if (set_lang(moe, default_langs) < 0)
 		DIE("setup(): config.h: default_langs");
 
-	m->output_mode = default_output_mode;
-	m->result_type = default_result_type;
+	moe->output_mode = default_output_mode;
+	moe->result_type = default_result_type;
 }
 
 
 static void
-setup(MoeTr *m)
+setup(MoeTr *moe)
 {
-	m->result = calloc(sizeof(Memory), sizeof(Memory));
-	if (m->result == NULL)
+	moe->result = calloc(sizeof(Memory), sizeof(Memory));
+	if (moe->result == NULL)
 		DIE("setup(): malloc");
 
-	m->result->size = sizeof(char) * BUFFER_SIZE;
-	m->result->val  = calloc(sizeof(char), m->result->size);
+	moe->result->size = sizeof(char) * BUFFER_SIZE;
+	moe->result->val  = calloc(sizeof(char), moe->result->size);
 
-	if (m->result->val == NULL) {
-		cleanup(m);
+	if (moe->result->val == NULL) {
+		cleanup(moe);
 
 		DIE("setup(): malloc");
 	}
@@ -168,18 +168,18 @@ setup(MoeTr *m)
 
 
 static void
-cleanup(MoeTr *m)
+cleanup(MoeTr *moe)
 {
-	if (m->result != NULL) {
-		if (m->result->val != NULL) {
-			m->result->size = 0;
-			free(m->result->val);
+	if (moe->result != NULL) {
+		if (moe->result->val != NULL) {
+			moe->result->size = 0;
+			free(moe->result->val);
 		}
 
-		free(m->result);
+		free(moe->result);
 	}
 
-	close(m->sock_d);
+	close(moe->sock_d);
 }
 
 
@@ -198,7 +198,7 @@ get_lang(const char *code)
 
 
 static int
-set_lang(MoeTr      *m,
+set_lang(MoeTr      *moe,
 	 const char *codes)
 {
 	const Lang *src_l, *trg_l;
@@ -232,8 +232,8 @@ set_lang(MoeTr      *m,
 	if ((trg_l = get_lang(trg)) == NULL)
 		return -1;
 
-	m->lang_src = src_l;
-	m->lang_trg = trg_l;
+	moe->lang_src = src_l;
+	moe->lang_trg = trg_l;
 
 	return 0;
 
@@ -289,7 +289,7 @@ inet_connect(const char *addr,
 
 
 static int
-request_handler(MoeTr *m)
+request_handler(MoeTr *moe)
 {
 #define TEXT_ENC_LEN   (TEXT_MAX_LEN * 3)
 #define BUFFER_REQ_LEN (sizeof(HTTP_REQUEST_DETAIL) + TEXT_ENC_LEN)
@@ -299,26 +299,26 @@ request_handler(MoeTr *m)
 	int     ret = -1;
 
 	size_t  req_len;
-	size_t  text_len = strlen(m->text);
+	size_t  text_len = strlen(moe->text);
 	size_t  b_total  = 0;
 	ssize_t b_sent;
 
 
-	url_encode(enc_text, m->text, text_len);
+	url_encode(enc_text, moe->text, text_len);
 
-	switch (m->result_type) {
+	switch (moe->result_type) {
 	case BRIEF:
 		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_BRIEF,
-				m->lang_src->code,
-				m->lang_trg->code,
+				moe->lang_src->code,
+				moe->lang_trg->code,
 				enc_text);
 		break;
 
 	case DETAIL:
 		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DETAIL,
-				m->lang_src->code,
-				m->lang_trg->code,
-				m->lang_trg->code,
+				moe->lang_src->code,
+				moe->lang_trg->code,
+				moe->lang_trg->code,
 				enc_text);
 		break;
 
@@ -337,7 +337,7 @@ request_handler(MoeTr *m)
 	req_len = strlen(req_buff);
 
 	while (b_total < req_len) {
-		if ((b_sent = send(m->sock_d, &req_buff[b_total],
+		if ((b_sent = send(moe->sock_d, &req_buff[b_total],
 				   req_len - b_total, 0)) < 0) {
 			perror("request_handler(): send");
 
@@ -355,7 +355,7 @@ request_handler(MoeTr *m)
 
 
 static int
-response_handler(MoeTr *m)
+response_handler(MoeTr *moe)
 {
 	char    *p, *h_end, *res;
 	size_t   res_len;
@@ -364,8 +364,8 @@ response_handler(MoeTr *m)
 
 
 	while (1) {
-		if ((b_sent = recv(m->sock_d, &m->result->val[b_total],
-				   m->result->size - b_total, 0)) < 0) {
+		if ((b_sent = recv(moe->sock_d, &moe->result->val[b_total],
+				   moe->result->size - b_total, 0)) < 0) {
 			perror("response_handler(): recv");
 
 			return -1;
@@ -376,11 +376,11 @@ response_handler(MoeTr *m)
 
 		b_total += (size_t)b_sent;
 
-		if (b_total == m->result->size) {
+		if (b_total == moe->result->size) {
 			Memory       *new;
-			const size_t  old_size = m->result->size;
+			const size_t  old_size = moe->result->size;
 
-			new = resize_memory(m->result,
+			new = resize_memory(moe->result,
 					    old_size + (BUFFER_SIZE >> 1u));
 			if (new == NULL) {
 				perror("response_handler(): realloc");
@@ -388,20 +388,20 @@ response_handler(MoeTr *m)
 				return -1;
 			}
 
-			m->result = new;
+			moe->result = new;
 		}
 	}
 
-	m->result->val[b_total] = '\0';
+	moe->result->val[b_total] = '\0';
 
 	/* Get the contents (JSON) */
-	if ((p = strstr(m->result->val, "\r\n")) == NULL)
+	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
 		return -1;
 
 	*p     = '\0';
 	p     += 2;
 	h_end  = p;
-	p      = m->result->val;
+	p      = moe->result->val;
 
 	/* Check http response status */
 	if ((p = strstr(p, "200")) == NULL)
@@ -428,8 +428,8 @@ response_handler(MoeTr *m)
 
 	*p = '\0';
 
-	memmove(m->result->val, res, res_len);
-	m->result->val[res_len] = '\0';
+	memmove(moe->result->val, res, res_len);
+	moe->result->val[res_len] = '\0';
 
 	return 0;
 }
@@ -450,39 +450,39 @@ resize_memory(Memory *mem, size_t size)
 
 
 static int
-run(MoeTr *m)
+run(MoeTr *moe)
 {
-	setup(m);
+	setup(moe);
 
-	if ((m->sock_d = inet_connect(URL, "80")) < 0)
+	if ((moe->sock_d = inet_connect(URL, "80")) < 0)
 		return -1;
 
-	if (request_handler(m) < 0)
+	if (request_handler(moe) < 0)
 		return -1;
 
-	if (response_handler(m) < 0)
+	if (response_handler(moe) < 0)
 		return -1;
 
 
-	run_func[m->output_mode](m);
+	run_func[moe->output_mode](moe);
 
-	cleanup(m);
+	cleanup(moe);
 
 	return 0;
 }
 
 
 static int
-run_intrc(MoeTr *m)
+run_intrc(MoeTr *moe)
 {
 	Intrc_cmd prs;
 	char *result = NULL, *tmp;
 
-	info_intrc(m);
+	info_intrc(moe);
 
 	/* Show the results immediately if the text is not null */
-	if (m->text != NULL) {
-		if (run(m) < 0)
+	if (moe->text != NULL) {
+		if (run(moe) < 0)
 			goto exit_l;
 		puts("------------------------\n");
 	}
@@ -494,7 +494,7 @@ run_intrc(MoeTr *m)
 		tmp = result;
 		linenoiseHistoryAdd(result);
 
-		prs = intrc_parse_cmd(m, tmp);
+		prs = intrc_parse_cmd(moe, tmp);
 
 		if (prs == EXIT)
 			goto exit_l;
@@ -503,9 +503,9 @@ run_intrc(MoeTr *m)
 			goto free_res;
 
 		/* let's go! */
-		if (strlen((m->text = RLSKIP(tmp))) > 0) {
+		if (strlen((moe->text = RLSKIP(tmp))) > 0) {
 			puts("------------------------\n");
-			if (run(m) < 0)
+			if (run(moe) < 0)
 				goto exit_l;
 			puts("------------------------\n");
 		}
@@ -521,37 +521,37 @@ exit_l:
 
 
 static Intrc_cmd
-intrc_parse_cmd(MoeTr *m, const char *c)
+intrc_parse_cmd(MoeTr *moe, const char *cmd)
 {
-	if (strncmp(c, "/", 1) != 0)
+	if (strncmp(cmd, "/", 1) != 0)
 		return MISS;
 
-	if (strcmp(c, "/q") == 0) {
+	if (strcmp(cmd, "/q") == 0) {
 		return EXIT;
 
-	} else if (strcmp(c, "/h") == 0) {
-		help_intrc(m);
+	} else if (strcmp(cmd, "/h") == 0) {
+		help_intrc(moe);
 
 		return OK;
 
-	} else if (strncmp(c, "/c", 2) == 0) {
-		if (set_lang(m, c +2) < 0)
+	} else if (strncmp(cmd, "/c", 2) == 0) {
+		if (set_lang(moe, cmd +2) < 0)
 			goto err;
 
 		printf("\nLanguage changed: "
 			REGULAR_GREEN("[%s]") " -> "
 			REGULAR_GREEN("[%s]") " \n\n",
-			m->lang_src->code, m->lang_trg->code
+			moe->lang_src->code, moe->lang_trg->code
 		);
 
 		return OK;
 
-	} else if (strncmp(c, "/o", 2) == 0) {
-		OutputMode d = atoi(c +2);
+	} else if (strncmp(cmd, "/o", 2) == 0) {
+		OutputMode d = atoi(cmd +2);
 
 		switch (d) {
-		case PARSE: m->output_mode = PARSE; break;
-		case RAW:   m->output_mode = RAW  ; break;
+		case PARSE: moe->output_mode = PARSE; break;
+		case RAW:   moe->output_mode = RAW  ; break;
 		default:    goto err;
 		}
 
@@ -563,13 +563,13 @@ intrc_parse_cmd(MoeTr *m, const char *c)
 
 		return OK;
 
-	} else if (strncmp(c, "/r", 2) == 0) {
-		ResultType r = atoi(c +2);
+	} else if (strncmp(cmd, "/r", 2) == 0) {
+		ResultType r = atoi(cmd +2);
 
 		switch (r) {
-		case BRIEF:    m->result_type = BRIEF   ; break;
-		case DETAIL:   m->result_type = DETAIL  ; break;
-		case DET_LANG: m->result_type = DET_LANG; break;
+		case BRIEF:    moe->result_type = BRIEF   ; break;
+		case DETAIL:   moe->result_type = DETAIL  ; break;
+		case DET_LANG: moe->result_type = DET_LANG; break;
 		default:       goto err;
 		}
 
@@ -591,34 +591,34 @@ err:
 
 
 static void
-raw(MoeTr *m)
+raw(MoeTr *moe)
 {
-	puts(m->result->val);
+	puts(moe->result->val);
 }
 
 
 static void
-parse(MoeTr *m)
+parse(MoeTr *moe)
 {
-	cJSON *p = cJSON_Parse(m->result->val);
+	cJSON *json = cJSON_Parse(moe->result->val);
 
-	if (p == NULL)
+	if (json == NULL)
 		return;
 
-	parse_func[m->result_type](m, p);
+	parse_func[moe->result_type](moe, json);
 
-	cJSON_Delete(p);
+	cJSON_Delete(json);
 }
 
 
 static void
-parse_brief(MoeTr *m, cJSON *p)
+parse_brief(MoeTr *moe, cJSON *json)
 {
-	(void)m;
+	(void)moe;
 
 	cJSON *i, *val;
 
-	cJSON_ArrayForEach(i, p->child) {
+	cJSON_ArrayForEach(i, json->child) {
 		val = i->child;
 
 		if (cJSON_IsString(val))
@@ -630,7 +630,7 @@ parse_brief(MoeTr *m, cJSON *p)
 
 
 static void
-parse_detail(MoeTr *m, cJSON *p)
+parse_detail(MoeTr *moe, cJSON *json)
 {
 	/*
 	   source text 
@@ -655,7 +655,7 @@ parse_detail(MoeTr *m, cJSON *p)
 	 */
 
 	cJSON *i;                   /* iterator      */
-	cJSON *result         = p;  /* temporary var */
+	cJSON *result         = json;  /* temporary var */
 
 	cJSON *trans_text     = result->child;
 
@@ -680,7 +680,7 @@ parse_detail(MoeTr *m, cJSON *p)
 
 
 	/* source text */
-	printf("\"%s\"\n", m->text);
+	printf("\"%s\"\n", moe->text);
 
 	/* correction */
 	if (cJSON_IsString(src_correction->child)) {
@@ -714,7 +714,7 @@ parse_detail(MoeTr *m, cJSON *p)
 
 	/* target lang */
 	printf(REGULAR_GREEN("[ %s ]:") " %s\n", 
-			m->lang_trg->code, m->lang_trg->value);
+			moe->lang_trg->code, moe->lang_trg->value);
 
 	putchar('\n');
 
@@ -850,12 +850,12 @@ l_example:
 
 
 static void
-parse_detect_lang(MoeTr *m, cJSON *p)
+parse_detect_lang(MoeTr *moe, cJSON *json)
 {
-	(void)m;
+	(void)moe;
 
 	char  *lang_c;
-	cJSON *lang_src = p->child->next->next;
+	cJSON *lang_src = json->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
 		lang_c = lang_src->valuestring;
@@ -887,7 +887,7 @@ help(void)
 
 
 static void
-help_intrc(const MoeTr *m)
+help_intrc(const MoeTr *moe)
 {
 	printf("------------------------\n"
 		BOLD_WHITE("Change the Languages:")
@@ -914,15 +914,15 @@ help_intrc(const MoeTr *m)
 	        " /q\n"
 	        "------------------------\n",
 
-		m->lang_src->code, m->lang_trg->code,
-		result_type_str[m->result_type],
-		output_mode_str[m->output_mode]
+		moe->lang_src->code, moe->lang_trg->code,
+		result_type_str[moe->result_type],
+		output_mode_str[moe->output_mode]
 	);
 }
 
 
 static void
-info_intrc(const MoeTr *m)
+info_intrc(const MoeTr *moe)
 {
 	printf(BOLD_WHITE("----[ Moetranslate ]----")
 	        "\n"
@@ -934,9 +934,9 @@ info_intrc(const MoeTr *m)
 		BOLD_WHITE("Show help   :") " Type /h\n\n"
 	        "------------------------\n",
 
-	        m->lang_src->code, m->lang_trg->code,
-		result_type_str[m->result_type],
-	        output_mode_str[m->output_mode]
+	        moe->lang_src->code, moe->lang_trg->code,
+		result_type_str[moe->result_type],
+	        output_mode_str[moe->output_mode]
 	);
 }
 
@@ -945,39 +945,40 @@ info_intrc(const MoeTr *m)
 int
 main(int argc, char *argv[])
 {
-	int   opt, ret = 0;
-	bool  is_intrc = false, is_detc = false;
-	MoeTr m = { 0 };
+	int   opt;
+	bool  is_intrc = false;
+	bool  is_detc  = false;
+	MoeTr moe      = { 0 };
 
 
 	if (argc == 1)
 		goto einv0;
 
-	load_config_h(&m);
+	load_config_h(&moe);
 
 	while ((opt = getopt(argc, argv, "b:f:d:rih")) != -1) {
 		switch (opt) {
 		case 'b':
-			m.result_type = BRIEF;
-			if (set_lang(&m, argv[optind -1]) < 0)
+			moe.result_type = BRIEF;
+			if (set_lang(&moe, argv[optind -1]) < 0)
 				goto einv1;
 
 			break;
 
 		case 'f':
-			m.result_type = DETAIL;
-			if (set_lang(&m, argv[optind -1]) < 0)
+			moe.result_type = DETAIL;
+			if (set_lang(&moe, argv[optind -1]) < 0)
 				goto einv1;
 
 			break;
 
 		case 'd':
-			m.result_type = DET_LANG;
-			is_detc       = true;
+			moe.result_type = DET_LANG;
+			is_detc         = true;
 			break;
 
 		case 'r':
-			m.output_mode = RAW;
+			moe.output_mode = RAW;
 			break;
 
 		case 'i':
@@ -995,21 +996,25 @@ main(int argc, char *argv[])
 
 
 	if (is_detc)
-		m.text = RLSKIP(argv[optind -1]);
-
+		moe.text = RLSKIP(argv[optind -1]);
 	else if (optind < argc)
-		m.text = RLSKIP(argv[optind]);
+		moe.text = RLSKIP(argv[optind]);
+	else
+		moe.text = NULL;
 
 
-	if (is_intrc)
-		ret = run_intrc(&m);
+	if (is_intrc) {
+		if (run_intrc(&moe) < 0)
+			goto err;
 
-	else 
-		ret = run(&m);
+	} else if (moe.text != NULL) {
+		if (run(&moe) < 0)
+			goto err;
 
+	} else {
+		goto einv0;
+	}
 
-	if (ret < 0)
-		goto err;
 
 	return EXIT_SUCCESS;
 
