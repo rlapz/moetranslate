@@ -29,7 +29,7 @@
 typedef enum {
 	OK  ,
 	MISS,
-	EXIT,
+	QUIT,
 	ERR ,
 } Intrc_cmd;
 
@@ -483,7 +483,7 @@ run_intrc(MoeTr *moe)
 	/* Show the results immediately if the text is not null */
 	if (moe->text != NULL) {
 		if (run(moe) < 0)
-			goto exit_l;
+			goto ret;
 		puts("------------------------\n");
 	}
 
@@ -496,8 +496,8 @@ run_intrc(MoeTr *moe)
 
 		prs = intrc_parse_cmd(moe, tmp);
 
-		if (prs == EXIT)
-			goto exit_l;
+		if (prs == QUIT)
+			goto ret;
 
 		if (prs == OK || prs == ERR)
 			goto free_res;
@@ -506,7 +506,7 @@ run_intrc(MoeTr *moe)
 		if (strlen((moe->text = RLSKIP(tmp))) > 0) {
 			puts("------------------------\n");
 			if (run(moe) < 0)
-				goto exit_l;
+				goto ret;
 			puts("------------------------\n");
 		}
 
@@ -514,7 +514,7 @@ run_intrc(MoeTr *moe)
 		free(result);
 	}
 
-exit_l:
+ret:
 	free(result);
 	return 0;
 }
@@ -523,68 +523,90 @@ exit_l:
 static Intrc_cmd
 intrc_parse_cmd(MoeTr *moe, const char *cmd)
 {
-	if (strncmp(cmd, "/", 1) != 0)
-		return MISS;
+	ResultType  r;
+	OutputMode  d;
+	const char *c = cmd;
 
-	if (strcmp(cmd, "/q") == 0) {
-		return EXIT;
+	if (strncmp(cmd, "/", 1) == 0) {
+		c = cmd +1;
 
-	} else if (strcmp(cmd, "/h") == 0) {
-		help_intrc(moe);
+		if (strncmp(c, "q", 1) == 0)
+			goto quit;
 
-		return OK;
+		else if (strncmp(c, "h", 1) == 0)
+			goto help;
 
-	} else if (strncmp(cmd, "/c", 2) == 0) {
-		if (set_lang(moe, cmd +2) < 0)
-			goto err;
+		else if (strncmp(c, "c", 1) == 0)
+			goto ch_lang;
 
-		printf("\nLanguage changed: "
-			REGULAR_GREEN("[%s]") " -> "
-			REGULAR_GREEN("[%s]") " \n\n",
-			moe->lang_src->code, moe->lang_trg->code
-		);
+		else if (strncmp(c, "o", 1) == 0)
+			goto ch_output;
 
-		return OK;
-
-	} else if (strncmp(cmd, "/o", 2) == 0) {
-		OutputMode d = atoi(cmd +2);
-
-		switch (d) {
-		case PARSE: moe->output_mode = PARSE; break;
-		case RAW:   moe->output_mode = RAW  ; break;
-		default:    goto err;
-		}
-
-		printf("\nMode output changed: "
-			REGULAR_YELLOW("%s")
-			"\n\n",
-			output_mode_str[d]
-		);
-
-		return OK;
-
-	} else if (strncmp(cmd, "/r", 2) == 0) {
-		ResultType r = atoi(cmd +2);
-
-		switch (r) {
-		case BRIEF:    moe->result_type = BRIEF   ; break;
-		case DETAIL:   moe->result_type = DETAIL  ; break;
-		case DET_LANG: moe->result_type = DET_LANG; break;
-		default:       goto err;
-		}
-
-		printf("\nResult type changed: "
-			REGULAR_YELLOW("%s")
-			"\n\n",
-			result_type_str[r]
-		);
-
-		return OK;
+		else if (strncmp(c, "r", 1) == 0)
+			goto ch_result;
 	}
+
+	return MISS;
+
+quit:
+	return QUIT;
+
+help:
+	help_intrc(moe);
+
+	return OK;
+
+ch_lang:
+	if (set_lang(moe, c +1) < 0)
+		goto err;
+	
+	printf("\nLanguage changed: "
+		REGULAR_GREEN("[%s]") " -> "
+		REGULAR_GREEN("[%s]") " \n\n",
+		moe->lang_src->code, moe->lang_trg->code
+	);
+
+	return OK;
+
+ch_output:
+	d = atoi(c +1);
+
+	switch (d) {
+	case PARSE: moe->output_mode = PARSE; break;
+	case RAW:   moe->output_mode = RAW  ; break;
+	default:    goto err;
+	}
+
+	printf("\nMode output changed: "
+		REGULAR_YELLOW("%s")
+		"\n\n",
+		output_mode_str[d]
+	);
+
+	return OK;
+
+ch_result:
+	r = atoi(c +1);
+
+	switch (r) {
+	case BRIEF:    moe->result_type = BRIEF   ; break;
+	case DETAIL:   moe->result_type = DETAIL  ; break;
+	case DET_LANG: moe->result_type = DET_LANG; break;
+	default:       goto err;
+	}
+
+	printf("\nResult type changed: "
+		REGULAR_YELLOW("%s")
+		"\n\n",
+		result_type_str[r]
+	);
+
+	return OK;
+
 
 err:
 	errno = EINVAL;
-	perror("> ");
+	perror("Error");
 
 	return ERR;
 }
