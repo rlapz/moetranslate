@@ -27,21 +27,21 @@
 
 /* Command results for interactive input mode */
 typedef enum {
-	OK  ,
-	MISS,
-	QUIT,
-	ERR ,
+	OK  = 1,
+	MISS   ,
+	QUIT   ,
+	ERR    ,
 } Intrc_cmd;
 
 typedef enum  {
-	BRIEF   ,
-	DETAIL  ,
-	DET_LANG,
+	BRIEF = 1,
+	DETAIL   ,
+	DET_LANG ,
 } ResultType;
 
 typedef enum {
-	PARSE,
-	RAW  ,
+	PARSE = 1,
+	RAW      ,
 } OutputMode;
 
 typedef struct {
@@ -78,7 +78,7 @@ static int         response_handler (MoeTr *moe);
 static Memory     *resize_memory    (Memory *mem, size_t size);
 static int         run              (MoeTr *moe);
 static int         run_intrc        (MoeTr *moe); // Interactive input
-static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
+static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, char *cmd);
 static void        raw              (MoeTr *moe);
 static void        parse            (MoeTr *moe);
 static void        parse_brief      (MoeTr *moe, cJSON *json);
@@ -488,6 +488,8 @@ run_intrc(MoeTr *moe)
 	}
 
 	while (1) {
+		errno = 0;
+
 		if ((result = linenoise(PROMPT_LABEL)) == NULL)
 			break;
 
@@ -521,19 +523,19 @@ ret:
 
 
 static Intrc_cmd
-intrc_parse_cmd(MoeTr *moe, const char *cmd)
+intrc_parse_cmd(MoeTr *moe, char *cmd)
 {
-	ResultType  r;
-	OutputMode  d;
-	const char *c = cmd;
+	ResultType   r = 0;
+	OutputMode   d = 0;
+	char        *c = lskip(cmd);
 
-	if (strncmp(cmd, "/", 1) == 0) {
-		c = cmd +1;
+	if (strncmp(c, "/", 1) == 0) {
+		c = cmd+1;
 
-		if (strncmp(c, "q", 1) == 0)
+		if (strcmp(c, "q") == 0)
 			goto quit;
 
-		else if (strncmp(c, "h", 1) == 0)
+		else if (strcmp(c, "h") == 0)
 			goto help;
 
 		else if (strncmp(c, "c", 1) == 0)
@@ -544,6 +546,8 @@ intrc_parse_cmd(MoeTr *moe, const char *cmd)
 
 		else if (strncmp(c, "r", 1) == 0)
 			goto ch_result;
+		else
+			goto err;
 	}
 
 	return MISS;
@@ -919,15 +923,15 @@ help_intrc(const MoeTr *moe)
 		" -> [%s]\n"
 		" /r [TYPE]\n"
 		"     TYPE:\n"
-                "      0 = Brief\n"
-	        "      1 = Detail\n"
-	        "      2 = Detect Language\n\n"
+                "      1 = Brief\n"
+	        "      2 = Detail\n"
+	        "      3 = Detect Language\n\n"
 	        BOLD_WHITE("Change Output Mode:  ")
 		" -> [%s]\n"
 	        " /o [OUTPUT]\n"
 	        "     OUTPUT:\n"
-		"      0 = Parse\n"
-		"      1 = Raw\n\n"
+		"      1 = Parse\n"
+		"      2 = Raw\n\n"
 	        BOLD_WHITE("Show Help:")
 		"\n"
 	        " /h\n\n"
