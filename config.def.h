@@ -15,7 +15,7 @@ static const OutputMode  default_output_mode = PARSE    ;
 
 
 #define PROMPT_LABEL          "-> " /* Prompt label                                     */
-#define BUFFER_SIZE           4096u /* Buffer size (growable)                           */
+#define BUFFER_SIZE           1024u /* Buffer size (growable)                           */
 #define TEXT_MAX_LEN          4096u /* Max input text length                            */
 #define DEFINITION_MAX_LINE   -1    /* Definition max lines, 0 = disable, -1 = show all */
 #define EXAMPLE_MAX_LINE      5     /* Example max lines,    0 = disable, -1 = show all */
@@ -23,6 +23,7 @@ static const OutputMode  default_output_mode = PARSE    ;
 //#define REQUEST_TIMEOUT       5
 
 
+#define PORT                  "80"
 #define URL                   "translate.googleapis.com" /* Without https://  */
 #define P_BRIEF               "/translate_a/single?client=gtx&ie=UTF-8&"            \
 			      "oe=UTF-8&dt=t&sl=%s&tl=%s&q=%s"

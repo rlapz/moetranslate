@@ -3,7 +3,8 @@
 
 #include "util.h"
 
-/* left trim */
+
+/* left skip */
 char *
 lskip(const char *str)
 {
@@ -13,7 +14,7 @@ lskip(const char *str)
 	return (char*)str;
 }
 
-/* right trim */
+/* right skip */
 char *
 rskip(char *str)
 {
@@ -26,42 +27,44 @@ rskip(char *str)
 	return str;
 }
 
-/* trim html tag ( <b>...</b> ) */
+/* skipping html tag ( <b>...</b> ) */
 char *
-skip_html_tags(char *dest)
+skip_html_tags(char *dest, size_t size)
 {
-#define B_SIZE 256
-	const char *hlist = "abiu";
-	char *p = dest;
-	char tmp[B_SIZE];
-	size_t i = 0, j = 0;
+	const struct {
+		const char *const tags[2];
+		size_t            len[2];
 
-	while (p[i] != '\0' && j < B_SIZE) {
-		const char *pl = hlist;
+	} tag_list[] = {
+		{ .tags = { "<a>", "</a>" }, .len = { 3, 4 } },
+		{ .tags = { "<b>", "</b>" }, .len = { 3, 4 } },
+		{ .tags = { "<i>", "</i>" }, .len = { 3, 4 } },
+		{ .tags = { "<u>", "</u>" }, .len = { 3, 4 } },
+		{ .tags = { "<br>", ""    }, .len = { 4, 0 } },
+	};
 
-		while (*pl) {
-			if (p[i] == '<' && p[i+1] != '/' && p[i+1] == *pl &&
-					p[i+2] == '>') {
-				i += 3;
+	const char *end       = dest + (size -1);
+	char       *tag_open  = NULL;
+	char       *tag_close = NULL;
+	size_t      i = 0, hi;
+
+	do {
+		hi = 0;
+		for (; hi < LENGTH(tag_list); hi++) {
+			if ((tag_open = strstr(dest + i, tag_list[hi].tags[0])) != NULL) {
+				if ((tag_close = strstr(tag_open, tag_list[hi].tags[1])) != NULL) {
+					memmove(tag_open, tag_open + tag_list[hi].len[0], end - tag_open);
+
+					tag_close -= tag_list[hi].len[0];
+
+					memmove(tag_close, tag_close + tag_list[hi].len[1], end - tag_close);
+				}
 			}
-
-			if (p[i] == '<' && p[i+1] == '/' && p[i+2] == *pl &&
-					p[i+3] == '>') {
-				i += 4;
-			}
-			pl++;
 		}
 
-		tmp[j] = p[i];
-		j++;
+		i += (end - tag_close);
+	} while (i < size);
 
-		if (p[i] == '\0')
-			break;
-		i++;
-	}
-
-	memcpy(p, tmp, j);
-	p[j] = '\0';
 
 	return dest;
 }
@@ -69,8 +72,8 @@ skip_html_tags(char *dest)
 char *
 url_encode(char *dest, const char *src, size_t len)
 {
-	const char *const hex  = "0123456789abcdef";
-	const unsigned char *p = (unsigned char *)src;
+	const char *const hex_list = "0123456789abcdef";
+	const unsigned char *p     = (unsigned char *)src;
 	size_t i   = 0;
 	size_t pos = 0;
 
@@ -79,8 +82,8 @@ url_encode(char *dest, const char *src, size_t len)
 			dest[pos++] = p[i];
 		} else {
 			dest[pos++] = '%';
-			dest[pos++] = hex[p[i] >> 4u];
-			dest[pos++] = hex[p[i] & 15u];
+			dest[pos++] = hex_list[p[i] >> 4u];
+			dest[pos++] = hex_list[p[i] & 15u];
 		}
 
 		i++;
