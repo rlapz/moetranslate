@@ -11,7 +11,7 @@ lskip(const char *str)
 	while (*str && isspace((unsigned char)(*str)))
 		str++;
 
-	return (char*)str;
+	return (char *)str;
 }
 
 /* right skip */
@@ -19,10 +19,11 @@ char *
 rskip(char *str)
 {
 	char *end = str + strlen(str) -1;
+
 	while (end > str && isspace((unsigned char)(*end)))
 		end--;
 
-	*(end+1) = '\0';
+	*(end +1) = '\0';
 
 	return str;
 }

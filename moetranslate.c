@@ -160,7 +160,7 @@ setup(MoeTr *moe)
 	moe->result->val  = calloc(sizeof(char), moe->result->size);
 
 	if (moe->result->val == NULL) {
-		cleanup(moe);
+		free(moe->result);
 
 		DIE("setup(): malloc");
 	}
@@ -482,6 +482,7 @@ ret:
 static int
 run_intrc(MoeTr *moe)
 {
+	int ret = 0;
 	Intrc_cmd prs;
 	char *input = NULL, *tmp;
 
@@ -515,7 +516,7 @@ run_intrc(MoeTr *moe)
 		if (strlen((moe->text = RLSKIP(tmp))) > 0) {
 			puts("------------------------\n");
 
-			if (run(moe) < 0)
+			if ((ret = run(moe)) < 0)
 				goto ret;
 
 			puts("------------------------\n");
@@ -527,16 +528,17 @@ run_intrc(MoeTr *moe)
 
 ret:
 	free(input);
-	return 0;
+
+	return ret;
 }
 
 
 static Intrc_cmd
 intrc_parse_cmd(MoeTr *moe, const char *cmd)
 {
-	ResultType   r = 0;
-	OutputMode   d = 0;
-	const char  *c = lskip(cmd);
+	ResultType  r = 0;
+	OutputMode  d = 0;
+	const char *c = lskip(cmd);
 
 	if (strncmp(c, "/", 1) == 0) {
 		c = cmd +1;
@@ -650,13 +652,11 @@ parse_brief(MoeTr *moe, cJSON *json)
 {
 	(void)moe;
 
-	cJSON *i, *val;
+	cJSON *i;
 
 	cJSON_ArrayForEach(i, json->child) {
-		val = i->child;
-
-		if (cJSON_IsString(val))
-			printf("%s", val->valuestring);
+		if (cJSON_IsString(i->child))
+			printf("%s", i->child->valuestring);
 	}
 
 	putchar('\n');
@@ -669,7 +669,7 @@ parse_detail(MoeTr *moe, cJSON *json)
 	/*
 	   source text 
 	  	|
-	   correction
+	   corrections
 	  	|
 	 source spelling
 	  	|
@@ -688,136 +688,132 @@ parse_detail(MoeTr *moe, cJSON *json)
 	    examples
 	 */
 
-	cJSON *i;                   /* iterator      */
-	cJSON *result         = json;  /* temporary var */
+	cJSON *i;
+	cJSON *tr_txt   = json->child;
+	cJSON *exmpls   = cJSON_GetArrayItem(json, 13);
+	cJSON *defs     = cJSON_GetArrayItem(json, 12);
+	cJSON *splls    = cJSON_GetArrayItem(tr_txt, cJSON_GetArraySize(tr_txt) -1);
+	cJSON *src_cor  = cJSON_GetArrayItem(json, 7);
+	cJSON *src_lang = cJSON_GetArrayItem(json, 2);
+	cJSON *synms    = cJSON_GetArrayItem(json, 1);
+	cJSON *src_spll = cJSON_GetArrayItem(splls, 3);
+	cJSON *trg_spll = cJSON_GetArrayItem(splls, 2);
 
-	cJSON *trans_text     = result->child;
+	cJSON *src_synn;
+	cJSON *trg_synn;
+	cJSON *def_subs;
+	cJSON *def_vals;
+	cJSON *def_oths;
+	cJSON *exmpl_vals;
 
-	cJSON *examples       = cJSON_GetArrayItem(result, 13),
-	      *definitions    = cJSON_GetArrayItem(result, 12),
-	      *spelling       = cJSON_GetArrayItem(trans_text,
-				 cJSON_GetArraySize(trans_text) -1);
-	cJSON *src_correction = cJSON_GetArrayItem(result, 7),
-	      *src_lang       = cJSON_GetArrayItem(result, 2),
-	      *synonyms       = cJSON_GetArrayItem(result, 1);
-
-	cJSON *src_spelling   = cJSON_GetArrayItem(spelling, 3),
-	      *tgt_spelling   = cJSON_GetArrayItem(spelling, 2);
-
-
-	cJSON *src_syn,  /* synonyms    */
-	      *tgt_syn;
-	cJSON *def_sub,  /* definitions */
-	      *def_val,
-	      *def_oth;
-	cJSON *expl_val; /* examples    */	
-
-
-	/* source text */
+	/* Source text */
 	printf("\"%s\"\n", moe->text);
 
-	/* correction */
-	if (cJSON_IsString(src_correction->child)) {
-		printf("\n" BOLD_YELLOW("Did you mean: ")
-			"\"%s\"" BOLD_YELLOW(" ?") "\n\n",
-			src_correction->child->next->valuestring);
+	/* Corrections */
+	if (cJSON_IsString(src_cor->child)) {
+		printf("\n"
+			BOLD_YELLOW("Did you mean: ")
+			"\"%s\" " BOLD_YELLOW("?") "\n\n",
+			src_cor->child->next->valuestring
+		);
 	}
 
-	/* source spelling */
-	if (cJSON_IsString(src_spelling))
-		printf("( " REGULAR_YELLOW("%s") " )\n", src_spelling->valuestring);
+	/* Source spelling */
+	if (cJSON_IsString(src_spll))
+		printf("( " REGULAR_YELLOW("%s") " )\n", src_spll->valuestring);
 
-	/* source lang */
+	/* Source lang */
 	if (cJSON_IsString(src_lang)) {
 		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
 			src_lang->valuestring,
-			get_lang(src_lang->valuestring)->value);
+			get_lang(src_lang->valuestring)->value
+		);
 	}
 
-	/* target text */
-	cJSON_ArrayForEach(i, trans_text) {
-		if (cJSON_IsString(i->child))
+	/* Target text */
+	cJSON_ArrayForEach(i, tr_txt) {
+		if (cJSON_IsString(i->child)) {
 			printf(BOLD_WHITE("%s"), i->child->valuestring);
+		}
 	}
 
 	putchar('\n');
 
-	/* target spelling */
-	if (cJSON_IsString(tgt_spelling))
-		printf("( " REGULAR_YELLOW("%s") " )\n", tgt_spelling->valuestring);
+	/* Target spelling */
+	if (cJSON_IsString(trg_spll))
+		printf("( " REGULAR_YELLOW("%s") " )\n", trg_spll->valuestring);
 
-	/* target lang */
-	printf(REGULAR_GREEN("[ %s ]:") " %s\n", 
-			moe->lang_trg->code, moe->lang_trg->value);
+	/* Target lang */
+	printf(REGULAR_GREEN("[ %s ]:") " %s\n",
+		moe->lang_trg->code, moe->lang_trg->value
+	);
 
 	putchar('\n');
 
-	/* synonyms */
-	if (!cJSON_IsArray(synonyms) || SYNONYM_MAX_LINE == 0)
-		goto l_definitions;
+	/* Synonyms */
+	if (!cJSON_IsArray(synms) || SYNONYM_MAX_LINE == 0)
+		goto defs_sect;
 
 	printf("\n------------------------");
 
+	/* Labels */
+	char *synn_lbl_str, *trg_synn_str;
 
-	/* label */
-	char *syn_lbl_str,
-	     *tgt_syn_str;
+	cJSON_ArrayForEach(i, synms) {
+		int iter     = 1;
+		int synn_max = SYNONYM_MAX_LINE;
 
-	cJSON_ArrayForEach(i, synonyms) {
-		int   iter    = 1,
-		      syn_max = SYNONYM_MAX_LINE;
+		/* Verbs, Nouns, etc */
+		synn_lbl_str    = i->child->valuestring;
+		synn_lbl_str[0] = toupper(synn_lbl_str[0]);
 
-		/* Verb, Noun, etc */
-		syn_lbl_str    = i->child->valuestring;
-		syn_lbl_str[0] = toupper(syn_lbl_str[0]);
+		printf("\n" BOLD_BLUE("[ %s ]"), synn_lbl_str);
 
-		printf("\n" BOLD_BLUE("[ %s ]"), syn_lbl_str);
-
-		/* target alternatives */
-		cJSON_ArrayForEach(tgt_syn, cJSON_GetArrayItem(i, 2)) {
-			if (syn_max == 0)
+		/* Target alternatives */
+		cJSON_ArrayForEach(trg_synn, cJSON_GetArrayItem(i, 2)) {
+			if (synn_max == 0)
 				break;
 
-			tgt_syn_str = tgt_syn->child->valuestring;
-			tgt_syn_str[0] = toupper(tgt_syn_str[0]);
+			trg_synn_str    = trg_synn->child->valuestring;
+			trg_synn_str[0] = toupper(trg_synn_str[0]);
 
-			printf("\n" BOLD_WHITE("%d. %s:") "\n\t"
-				REGULAR_YELLOW("-> "), iter, tgt_syn_str);
+			printf("\n" BOLD_WHITE("%d. %s:") "\n  "
+				REGULAR_YELLOW("-> "), iter, trg_synn_str
+			);
 
-			/* source alternatives */
-			int syn_src_size = cJSON_GetArraySize(cJSON_GetArrayItem(
-						tgt_syn, 1)) -1;
+			/* Source alternatives */
+			int synn_src_size = cJSON_GetArraySize(
+						cJSON_GetArrayItem(trg_synn, 1)) -1;
 
-			cJSON_ArrayForEach(src_syn, cJSON_GetArrayItem(tgt_syn, 1)) {
-				printf("%s", src_syn->valuestring);
+			cJSON_ArrayForEach(src_synn, cJSON_GetArrayItem(trg_synn, 1)) {
+				printf("%s", src_synn->valuestring);
 
-				if (syn_src_size > 0) {
+				if (synn_src_size > 0) {
 					printf(", ");
-					syn_src_size--;
+					synn_src_size--;
 				}
 			}
 
 			iter++;
-			syn_max--;
+			synn_max--;
 		}
 		putchar('\n');
 	}
 	putchar('\n');
 
 
-l_definitions:
-	/* definitions */
-	if (!cJSON_IsArray(definitions) || DEFINITION_MAX_LINE == 0)
-		goto l_example;
+defs_sect:
+	/* Definitions */
+	if (!cJSON_IsArray(defs) || DEFINITION_MAX_LINE == 0)
+		goto exmpls_sect;
 
 	printf("\n------------------------");
 
-	char *def_lbl_str, /* label */
-	     *def_sub_str;
+	char *def_lbl_str, *def_sub_str;
 
-	cJSON_ArrayForEach(i, definitions) {
-		int   iter    = 1,
-		      def_max = DEFINITION_MAX_LINE;
+	cJSON_ArrayForEach(i, defs) {
+		int iter     = 1;
+		int defs_max = DEFINITION_MAX_LINE;
 
 		def_lbl_str = i->child->valuestring;
 
@@ -825,55 +821,62 @@ l_definitions:
 			continue;
 
 		def_lbl_str[0] = toupper(def_lbl_str[0]);
+
 		printf("\n" BOLD_YELLOW("[ %s ]"), def_lbl_str);
 
-		cJSON_ArrayForEach(def_sub, cJSON_GetArrayItem(i, 1)) {
-			if (def_max == 0)
+		cJSON_ArrayForEach(def_subs, cJSON_GetArrayItem(i, 1)) {
+			if (defs_max == 0)
 				break;
 
-			def_val	= cJSON_GetArrayItem(def_sub, 2);
-			def_oth	= cJSON_GetArrayItem(def_sub, 3);
+			def_vals = cJSON_GetArrayItem(def_subs, 2);
+			def_oths = cJSON_GetArrayItem(def_subs, 3);
 
-			def_sub_str    = def_sub->child->valuestring;
+			def_sub_str    = def_subs->child->valuestring;
 			def_sub_str[0] = toupper(def_sub_str[0]);
 
-			printf("\n" BOLD_WHITE("%d. %s") "\n\t", iter, def_sub_str);
+			printf("\n" BOLD_WHITE("%d. %s") "\n  ", iter, def_sub_str);
 
-			if (cJSON_IsString(def_val))
-				printf(REGULAR_YELLOW("->") " %s ", def_val->valuestring);
+			if (cJSON_IsString(def_vals))
+				printf(REGULAR_YELLOW("->") " %s ", def_vals->valuestring);
 
-			if (cJSON_IsArray(def_oth) && cJSON_IsString(def_oth->child->child))
-				printf(REGULAR_GREEN("[ %s ]"), def_oth->child->child->valuestring);
+			if (cJSON_IsArray(def_oths) &&
+					cJSON_IsString(def_oths->child->child)) {
 
+				printf(REGULAR_GREEN("[ %s ]"),
+					def_oths->child->child->valuestring
+				);
+			}
 			iter++;
-			def_max--;
+			defs_max--;
 		}
 		putchar('\n');
 	}
 	putchar('\n');
 
-l_example:
-	if (!cJSON_IsArray(examples) || EXAMPLE_MAX_LINE == 0)
-		return; /* it's over */
+
+exmpls_sect:
+	if (!cJSON_IsArray(exmpls) || EXAMPLE_MAX_LINE == 0)
+		return; /* It's over */
 
 	printf("\n------------------------\n");
 
-	int  iter     = 1,
-	     expl_max = EXAMPLE_MAX_LINE;
-	char *expl_str;
-	cJSON_ArrayForEach(i, examples) {
-		cJSON_ArrayForEach(expl_val, i) {
-			if (expl_max == 0)
+	int iter = 1, exmpls_max = EXAMPLE_MAX_LINE;
+	char *exmpl_str;
+
+	cJSON_ArrayForEach(i, exmpls) {
+		cJSON_ArrayForEach(exmpl_vals, i) {
+			if (exmpls_max == 0)
 				break;
 
-			expl_str = expl_val->child->valuestring;
+			exmpl_str = exmpl_vals->child->valuestring;
+			exmpl_str[0] = toupper(skip_html_tags(exmpl_str, strlen(exmpl_str))[0]);
 
-			expl_str[0] = toupper(skip_html_tags(expl_str, strlen(expl_str))[0]);
-
-			printf("%d. " REGULAR_YELLOW("%s") "\n", iter, expl_str);
+			printf("%d. " REGULAR_YELLOW("%s") "\n",
+				iter, exmpl_str
+			);
 
 			iter++;
-			expl_max--;
+			exmpls_max--;
 		}
 		putchar('\n');
 	}
@@ -885,13 +888,13 @@ parse_detect_lang(MoeTr *moe, cJSON *json)
 {
 	(void)moe;
 
-	char  *lang_c;
 	cJSON *lang_src = json->child->next->next;
 
-	if (cJSON_IsString(lang_src)) {
-		lang_c = lang_src->valuestring;
-		printf("%s (%s)\n", lang_c, get_lang(lang_c)->value);
-	}
+	if (cJSON_IsString(lang_src))
+		printf("%s (%s)\n",
+			lang_src->valuestring,
+			get_lang(lang_src->valuestring)->value
+		);
 }
 
 
