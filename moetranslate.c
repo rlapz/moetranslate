@@ -25,7 +25,7 @@
 
 #define RLSKIP(X) rskip(lskip(X))
 
-/* Command results for interactive input mode */
+/* Command's results in interactive input mode */
 typedef enum {
 	OK  = 1,
 	MISS   ,
@@ -397,7 +397,7 @@ response_handler(MoeTr *moe)
 	moe->result->val[b_total] = '\0';
 
 	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
-		return -1;
+		goto err;
 
 	*p     = '\0';
 	p     += 2;
@@ -405,12 +405,17 @@ response_handler(MoeTr *moe)
 	p      = moe->result->val;
 
 	/* Check http response status */
-	if ((p = strstr(p, "200")) == NULL)
+	if ((p = strstr(p, "200")) == NULL) {
+		fprintf(stderr, "response_handler(): Response from the server: %s\n",
+			moe->result->val
+		);
+
 		return -1;
+	}
 
 	p = strstr(h_end, "\r\n\r\n");
 	if (p == NULL)
-		return -1;
+		goto err;
 
 	*p = '\0';
 
@@ -418,20 +423,25 @@ response_handler(MoeTr *moe)
 	p += 4;
 
 	if ((p = strstr(p, "\r\n")) == NULL)
-		return -1;
+		goto err;
 
 	p      += 2;
 	res     = p;
 	res_len = strlen(p);
 
 	if ((p = strstr(res, "\r\n")) == NULL)
-		return -1;
+		goto err;
 
 	*p = '\0';
 
 	memmove(moe->result->val, res, res_len);
 
 	return 0;
+
+err:
+	fprintf(stderr, "response_handler(): Failed to get the contents.\n");
+
+	return -1;
 }
 
 
@@ -462,11 +472,8 @@ run(MoeTr *moe)
 	if (request_handler(moe) < 0)
 		goto cleanup;
 
-	if (response_handler(moe) < 0) {
-		fprintf(stderr, "response_handler(): Failed to get http response!\n");
-
+	if (response_handler(moe) < 0)
 		goto cleanup;
-	}
 
 	run_func[moe->output_mode](moe);
 	ret = 0;
@@ -538,30 +545,34 @@ intrc_parse_cmd(MoeTr *moe, const char *cmd)
 {
 	ResultType  r = 0;
 	OutputMode  d = 0;
-	const char *c = lskip(cmd);
+	const char *c = RLSKIP(cmd);
 
-	if (strncmp(c, "/", 1) == 0) {
-		c = cmd +1;
+	if (strcmp(c, "/") == 0)
+		goto info;
 
-		if (strcmp(c, "q") == 0)
-			goto quit;
+	if (strcmp(c, "/q") == 0)
+		goto quit;
 
-		else if (strcmp(c, "h") == 0)
-			goto help;
+	if (strcmp(c, "/h") == 0)
+		goto help;
 
-		else if (strncmp(c, "c", 1) == 0)
-			goto ch_lang;
+	if (strncmp(c, "/c", 2) == 0)
+		goto ch_lang;
 
-		else if (strncmp(c, "o", 1) == 0)
-			goto ch_output;
+	if (strncmp(c, "/o", 2) == 0)
+		goto ch_output;
 
-		else if (strncmp(c, "r", 1) == 0)
-			goto ch_result;
-		else
-			goto err;
-	}
+	if (strncmp(c, "/r", 2) == 0)
+		goto ch_result;
 
+
+	/* Default return */
 	return MISS;
+
+info:
+	info_intrc(moe);
+
+	return OK;
 
 quit:
 	return QUIT;
@@ -572,7 +583,7 @@ help:
 	return OK;
 
 ch_lang:
-	if (set_lang(moe, c +1) < 0)
+	if (set_lang(moe, c +2) < 0)
 		goto err;
 	
 	printf("\nLanguage changed: "
@@ -584,7 +595,7 @@ ch_lang:
 	return OK;
 
 ch_output:
-	d = atoi(c +1);
+	d = atoi(c +2);
 
 	switch (d) {
 	case PARSE: moe->output_mode = PARSE; break;
@@ -601,7 +612,7 @@ ch_output:
 	return OK;
 
 ch_result:
-	r = atoi(c +1);
+	r = atoi(c +2);
 
 	switch (r) {
 	case BRIEF:    moe->result_type = BRIEF   ; break;

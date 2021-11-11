@@ -28,7 +28,7 @@ rskip(char *str)
 	return str;
 }
 
-/* skipping html tag ( <b>...</b> ) */
+/* skipping html tags ( <b>...</b> ) */
 char *
 skip_html_tags(char *dest, size_t size)
 {
@@ -37,11 +37,12 @@ skip_html_tags(char *dest, size_t size)
 		size_t            len[2];
 
 	} tag_list[] = {
-		{ .tags = { "<a>", "</a>" }, .len = { 3, 4 } },
 		{ .tags = { "<b>", "</b>" }, .len = { 3, 4 } },
 		{ .tags = { "<i>", "</i>" }, .len = { 3, 4 } },
+
+		/* We don't really need these (probably):
 		{ .tags = { "<u>", "</u>" }, .len = { 3, 4 } },
-		{ .tags = { "<br>", ""    }, .len = { 4, 0 } },
+		{ .tags = { "<br>", ""    }, .len = { 4, 0 } }, */
 	};
 
 	const char *end       = dest + (size -1);
@@ -65,7 +66,6 @@ skip_html_tags(char *dest, size_t size)
 
 		i += (end - tag_close);
 	} while (i < size);
-
 
 	return dest;
 }
