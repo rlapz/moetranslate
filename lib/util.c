@@ -79,7 +79,7 @@ url_encode(char *dest, const char *src, size_t len)
 	size_t pos = 0;
 
 	while (p[i] != '\0' && i < len) {
-		if (isalnum(p[i])) {
+		if (isalnum((unsigned char)p[i])) {
 			dest[pos++] = p[i];
 		} else {
 			dest[pos++] = '%';

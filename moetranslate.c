@@ -1073,7 +1073,7 @@ einv0:
 	errno = EINVAL;
 
 einv1:
-	fprintf(stderr, "Moetranslate: %s!\n\n", strerror(errno));
+	fprintf(stderr, "Error: %s!\n\n", strerror(errno));
 	help();
 
 err:
