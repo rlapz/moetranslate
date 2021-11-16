@@ -3,88 +3,90 @@
 
 #include "util.h"
 
-/* left trim */
-char *
-ltrim(const char *str)
-{
-	if (str == NULL)
-		return NULL;
 
+/* left skip */
+char *
+lskip(const char *str)
+{
 	while (*str && isspace((unsigned char)(*str)))
 		str++;
-	return (char*)str;
+
+	return (char *)str;
 }
 
-/* right trim */
+/* right skip */
 char *
-rtrim(char *str)
+rskip(char *str)
 {
-	if (str == NULL)
-		return NULL;
-
 	char *end = str + strlen(str) -1;
-	while (end > str && isspace((unsigned char)(*end))) {
-		*end = '\0';
+
+	while (end > str && isspace((unsigned char)(*end)))
 		end--;
-	}
+
+	*(end +1) = '\0';
+
 	return str;
 }
 
-/* trim html tag ( <b>...</b> ) */
+/* skipping html tags ( <b>...</b> ) */
 char *
-trim_tag(char *dest)
+skip_html_tags(char *dest, size_t size)
 {
-#define B_SIZE 256
-	const char *hlist = "abiu";
-	char *p = dest;
-	char tmp[B_SIZE];
-	size_t i = 0, j = 0;
+	const struct {
+		const char *const tags[2];
+		size_t            len[2];
 
-	while (p[i] != '\0' && j < B_SIZE) {
-		const char *pl = hlist;
+	} tag_list[] = {
+		{ .tags = { "<b>", "</b>" }, .len = { 3, 4 } },
+		{ .tags = { "<i>", "</i>" }, .len = { 3, 4 } },
 
-		while (*pl) {
-			if (p[i] == '<' && p[i+1] != '/' && p[i+1] == *pl &&
-					p[i+2] == '>') {
-				i += 3;
+		/* We don't really need these (probably):
+		{ .tags = { "<u>", "</u>" }, .len = { 3, 4 } },
+		{ .tags = { "<br>", ""    }, .len = { 4, 0 } }, */
+	};
+
+	const char *end       = dest + (size -1);
+	char       *tag_open  = NULL;
+	char       *tag_close = NULL;
+	size_t      i = 0, hi;
+
+	do {
+		hi = 0;
+		for (; hi < LENGTH(tag_list); hi++) {
+			if ((tag_open = strstr(dest + i, tag_list[hi].tags[0])) != NULL) {
+				if ((tag_close = strstr(tag_open, tag_list[hi].tags[1])) != NULL) {
+					memmove(tag_open, tag_open + tag_list[hi].len[0], end - tag_open);
+
+					tag_close -= tag_list[hi].len[0];
+
+					memmove(tag_close, tag_close + tag_list[hi].len[1], end - tag_close);
+				}
 			}
-
-			if (p[i] == '<' && p[i+1] == '/' && p[i+2] == *pl &&
-					p[i+3] == '>') {
-				i += 4;
-			}
-			pl++;
 		}
 
-		tmp[j] = p[i];
-		j++;
-
-		if (p[i] == '\0')
-			break;
-		i++;
-	}
-
-	memcpy(p, tmp, j);
-	p[j] = '\0';
+		i += (end - tag_close);
+	} while (i < size);
 
 	return dest;
 }
 
 char *
-url_encode(char *dest, const unsigned char *src, size_t len)
+url_encode(char *dest, const char *src, size_t len)
 {
-	const char *hex = "0123456789abcdef";
-	size_t	    i  	= 0;
-	size_t	    pos	= 0;
+	const char *const hex_list = "0123456789abcdef";
+	const unsigned char *p     = (unsigned char *)src;
+	size_t i   = 0;
+	size_t pos = 0;
 
-	while (src[i] != '\0' && i < len) {
-		if (isalnum(src[i])) {
-			dest[pos++] = src[i];
+	while (p[i] != '\0' && i < len) {
+		if (isalnum((unsigned char)p[i])) {
+			dest[pos++] = p[i];
 		} else {
 			dest[pos++] = '%';
-			dest[pos++] = hex[src[i] >> 0x4];
-			dest[pos++] = hex[src[i] & 0xf];
+			dest[pos++] = hex_list[p[i] >> 4u];
+			dest[pos++] = hex_list[p[i] & 15u];
 		}
+
 		i++;
 	}
 

@@ -9,24 +9,14 @@ A simple language translator written in C
 
 ## How to Install:
 
-### Debian-based:
-
 ```
-sudo apt install libcurl4-openssl-dev
-make && sudo make install
-```
-
-### Arch-based:
-
-```
-sudo pacman -S libcurl-gnutls
-make && sudo make install
+make install
 ```
 
 ## How to Uninstall:
 
 ```
-sudo make uninstall
+make uninstall
 ```
 
 ## How to Use:
@@ -59,6 +49,7 @@ moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 	```
 	moetranslate -i
 	moetranslate -i -b auto:en
+	moetranslate -if auto:en
 	```
 4. Show help:
 	`moetranslate -h`
