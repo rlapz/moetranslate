@@ -20,7 +20,6 @@ static const OutputMode  default_output_mode = PARSE    ;
 #define DEFINITION_MAX_LINE   -1    /* Definition max lines, 0 = disable, -1 = show all */
 #define EXAMPLE_MAX_LINE      5     /* Example max lines,    0 = disable, -1 = show all */
 #define SYNONYM_MAX_LINE      -1    /* Synonym max lines,    0 = disable, -1 = show all */
-//#define REQUEST_TIMEOUT       5
 
 
 #define PORT                  "80"
