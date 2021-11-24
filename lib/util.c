@@ -83,7 +83,7 @@ url_encode(char *dest, const char *src, size_t len)
 			dest[pos++] = p[i];
 		} else {
 			dest[pos++] = '%';
-			dest[pos++] = hex_list[p[i] >> 4u];
+			dest[pos++] = hex_list[(p[i] >> 4u) & 15u];
 			dest[pos++] = hex_list[p[i] & 15u];
 		}
 

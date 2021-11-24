@@ -75,7 +75,7 @@ static int         set_lang         (MoeTr *moe, const char *codes);
 static int         inet_connect     (const char *addr, const char *port);
 static int         request_handler  (MoeTr *moe);
 static int         response_handler (MoeTr *moe);
-static Memory     *resize_memory    (Memory *mem, size_t size);
+static Memory     *resize_memory    (Memory **mem, size_t size);
 static int         run              (MoeTr *moe);
 static int         run_intrc        (MoeTr *moe); // Interactive input
 static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
@@ -152,32 +152,20 @@ load_config_h(MoeTr *moe)
 static void
 setup(MoeTr *moe)
 {
-	moe->result = calloc(sizeof(Memory), sizeof(Memory));
+	moe->result = calloc(1u, sizeof(Memory) + BUFFER_SIZE);
 	if (moe->result == NULL)
 		DIE("setup(): malloc");
 
-	moe->result->size = sizeof(char) * BUFFER_SIZE;
-	moe->result->val  = calloc(sizeof(char), moe->result->size);
-
-	if (moe->result->val == NULL) {
-		free(moe->result);
-
-		DIE("setup(): malloc");
-	}
+	moe->result->size = BUFFER_SIZE;
+	moe->result->val  = (char *)moe->result + sizeof(Memory);
 }
 
 
 static void
 cleanup(MoeTr *moe)
 {
-	if (moe->result != NULL) {
-		if (moe->result->val != NULL) {
-			moe->result->size = 0;
-			free(moe->result->val);
-		}
-
+	if (moe->result != NULL)
 		free(moe->result);
-	}
 
 	close(moe->sock_d);
 }
@@ -362,28 +350,28 @@ response_handler(MoeTr *moe)
 	char    *p, *h_end, *res;
 	size_t   res_len;
 	size_t   b_total = 0;
-	ssize_t  b_sent;
-
+	ssize_t  b_recvd;
 
 	while (1) {
-		if ((b_sent = recv(moe->sock_d, &moe->result->val[b_total],
+
+		if ((b_recvd = recv(moe->sock_d, &moe->result->val[b_total],
 				   moe->result->size - b_total, 0)) < 0) {
 			perror("response_handler(): recv");
 
 			return -1;
 		}
 
-		if (b_sent == 0)
+		if (b_recvd == 0)
 			break;
 
-		b_total += (size_t)b_sent;
+		b_total += (size_t)b_recvd;
 
 		if (b_total == moe->result->size) {
-			Memory       *new;
-			const size_t  old_size = moe->result->size;
+			Memory *new;
 
-			new = resize_memory(moe->result,
-					    old_size + (BUFFER_SIZE >> 1u));
+			new = resize_memory(&(moe->result),
+						moe->result->size + b_recvd);
+
 			if (new == NULL) {
 				perror("response_handler(): realloc");
 
@@ -400,7 +388,7 @@ response_handler(MoeTr *moe)
 		goto err;
 
 	*p     = '\0';
-	p     += 2;
+	p     += 2u;
 	h_end  = p;
 	p      = moe->result->val;
 
@@ -420,12 +408,12 @@ response_handler(MoeTr *moe)
 	*p = '\0';
 
 	/* Skipping \r\n\r\n */
-	p += 4;
+	p += 4u;
 
 	if ((p = strstr(p, "\r\n")) == NULL)
 		goto err;
 
-	p      += 2;
+	p      += 2u;
 	res     = p;
 	res_len = strlen(p);
 
@@ -446,16 +434,19 @@ err:
 
 
 static Memory *
-resize_memory(Memory *mem, size_t size)
+resize_memory(Memory **mem, size_t size)
 {
-	char *p = realloc(mem->val, mem->size + size);
-	if (p == NULL)
+	Memory *new_mem;
+
+	new_mem = realloc((*mem), sizeof(Memory) + (*mem)->size + size);
+	if (new_mem == NULL)
 		return NULL;
 
-	mem->val   = p;
-	mem->size += size;
+	new_mem->val   = (char *)new_mem + sizeof(Memory);
+	new_mem->size += size;
+	(*mem)         = new_mem;
 
-	return mem;
+	return *mem;
 }
 
 
