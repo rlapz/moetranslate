@@ -11,8 +11,8 @@ VERSION   = 0.3.0
 
 PREFIX    = /usr
 CC        = cc
-CFLAGS    = -g -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
-	    -D_POSIX_C_SOURCE=200809L -Os
+CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
+	    -D_POSIX_C_SOURCE=200809L -O3
 
 SRC       = moetranslate.c lib/cJSON.c lib/util.c lib/linenoise.c
 OBJ       = $(SRC:.c=.o)

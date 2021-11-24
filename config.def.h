@@ -75,7 +75,7 @@ static const Lang lang[] = {
 {"haw", "Hawaiian"    }, {"iw"   , "Hebrew"             }, {"hi"   , "Hindi"               },
 {"hmn", "Hmong"       }, {"hu"   , "Hungarian"          }, {"is"   , "Icelandic"           },
 {"ig" , "Igbo"        }, {"id"   , "Indonesian"         }, {"ga"   , "Irish"               },
-{"it" , "Italian"     }, {"ja"   , "Japanese"           }, {"jv"   , "Javanese"            },
+{"it" , "Italian"     }, {"ja"   , "Japanese"           }, {"jw"   , "Javanese"            },
 {"kn" , "Kannada"     }, {"kk"   , "Kazakh"             }, {"km"   , "Khmer"               },
 {"rw" , "Kinyarwanda" }, {"ko"   , "Korean"             }, {"ku"   , "Kurdish"             },
 {"ky" , "Kyrgyz"      }, {"lo"   , "Lao"                }, {"la"   , "Latin"               },
