@@ -7,7 +7,7 @@ A simple language translator written in C
 ## Currently Supported:
 1. Google Translate API
 
-## Required Package(s)
+## Required Package(s):
 
 ```
 libedit (https://thrysoee.dk/editline/)
@@ -44,7 +44,7 @@ moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 
 	`auto` -> automatic detection
 
-	`id`   -> Indonsian language code
+	`id`   -> Indonesian language code
 2. Full/detail output:
 	`moetranslate -f en:id "Hello wrld\!"`
 

@@ -467,8 +467,10 @@ run_intrc(MoeTr *moe)
 	while (1) {
 		errno = 0;
 
-		if ((input = readline(PROMPT_LABEL)) == NULL)
-			continue;
+		if ((input = readline(PROMPT_LABEL)) == NULL) {
+			putchar('\n');
+			goto ret0;
+		}
 
 		add_history(input);
 
