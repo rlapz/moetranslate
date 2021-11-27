@@ -15,6 +15,6 @@
 
 char *lskip         (const char *str);
 char *rskip         (char *str);
-char *skip_html_tags(char *dest, size_t size);
+char *skip_html_tags(char *dest, size_t len);
 char *url_encode    (char *dest, const char *src, size_t len);
 

@@ -30,7 +30,8 @@ rskip(char *str)
 
 /* skipping html tags ( <b>...</b> ) */
 char *
-skip_html_tags(char *dest, size_t size)
+skip_html_tags(char *dest,
+	       size_t len)
 {
 	const struct {
 		const char *const tags[2];
@@ -45,10 +46,16 @@ skip_html_tags(char *dest, size_t size)
 		{ .tags = { "<br>", ""    }, .len = { 4, 0 } }, */
 	};
 
-	const char *end       = dest + (size -1);
+	const char *end;
 	char       *tag_open  = NULL;
 	char       *tag_close = NULL;
 	size_t      i = 0, hi;
+
+
+	if (len == 0)
+		len = strlen(dest);
+
+	end = dest + (len -1u);
 
 	do {
 		hi = 0;
@@ -65,29 +72,36 @@ skip_html_tags(char *dest, size_t size)
 		}
 
 		i += (end - tag_close);
-	} while (i < size);
+	} while (i < len);
 
 	return dest;
 }
 
 char *
-url_encode(char *dest, const char *src, size_t len)
+url_encode(char *dest,
+	   const char *src,
+	   size_t len)
 {
 	const char *const hex_list = "0123456789abcdef";
-	const unsigned char *p     = (unsigned char *)src;
+	const unsigned char *p     = (const unsigned char *)src;
 	size_t i   = 0;
 	size_t pos = 0;
 
+
+	if (len == 0)
+		len = strlen(src);
+
 	while (p[i] != '\0' && i < len) {
-		if (isalnum((unsigned char)p[i])) {
-			dest[pos++] = p[i];
-		} else {
+		if (!isalnum((unsigned char)p[i])) {
 			dest[pos++] = '%';
 			dest[pos++] = hex_list[(p[i] >> 4u) & 15u];
 			dest[pos++] = hex_list[p[i] & 15u];
+
+			i++;
+			continue;
 		}
 
-		i++;
+		dest[pos++] = p[i++];
 	}
 
 	dest[pos] = '\0';

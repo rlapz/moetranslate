@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include <sys/types.h>
@@ -55,14 +56,15 @@ typedef struct {
 } Lang;
 
 typedef struct MoeTr {
-	ResultType  result_type;
-	OutputMode  output_mode;
-	int         sock_d     ;
-	const char *text       ;
-	char       *request    ;
-	Memory     *result     ;
-	const Lang *lang_src   ;
-	const Lang *lang_trg   ;
+	bool        is_connected;
+	ResultType  result_type ;
+	OutputMode  output_mode ;
+	int         sock_d      ;
+	const char *text        ;
+	char       *request     ;
+	Memory     *result      ;
+	const Lang *lang_src    ;
+	const Lang *lang_trg    ;
 } MoeTr;
 
 
@@ -70,17 +72,17 @@ typedef struct MoeTr {
 static void        load_config_h    (MoeTr *moe);
 static void        setup            (MoeTr *moe);
 static void        cleanup          (MoeTr *moe);
-static const Lang *get_lang         (const char *code);
+static const Lang *get_lang         (const char *code, size_t len);
 static int         set_lang         (MoeTr *moe, const char *codes);
-static int         inet_connect     (const char *addr, const char *port);
+static int         inet_connect     (MoeTr *moe);
 static int         request_handler  (MoeTr *moe);
 static int         response_handler (MoeTr *moe);
 static Memory     *resize_memory    (Memory **mem, size_t size);
 static int         run              (MoeTr *moe);
 static int         run_intrc        (MoeTr *moe); // Interactive input
 static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
-static void        raw              (MoeTr *moe);
-static void        parse            (MoeTr *moe);
+static int         raw              (MoeTr *moe);
+static int         parse            (MoeTr *moe);
 static void        parse_brief      (MoeTr *moe, cJSON *json);
 static void        parse_detail     (MoeTr *moe, cJSON *json);
 static void        parse_detect_lang(MoeTr *moe, cJSON *json);
@@ -115,7 +117,7 @@ static const char *const output_mode_str[] = {
 	[RAW]   = "Raw"
 };
 
-static void (*const run_func[])(MoeTr *) = {
+static int (*const run_func[])(MoeTr *) = {
 	[PARSE] = parse,
 	[RAW]   = raw
 };
@@ -158,6 +160,7 @@ setup(MoeTr *moe)
 
 	moe->result->size = BUFFER_SIZE;
 	moe->result->val  = (char *)moe->result + sizeof(Memory);
+	moe->is_connected = false;
 }
 
 
@@ -167,17 +170,18 @@ cleanup(MoeTr *moe)
 	if (moe->result != NULL)
 		free(moe->result);
 
-	close(moe->sock_d);
+	if (moe->is_connected)
+		close(moe->sock_d);
 }
 
 
 static const Lang *
-get_lang(const char *code)
+get_lang(const char *code,
+	 size_t len)
 {
-	size_t len_lang = LENGTH(lang);
-	for (size_t i = 0; i < len_lang; i++) {
-		if (strcmp(code, lang[i].code) == 0)
-			return &lang[i];
+	for (size_t i = LENGTH(lang); i > 0; i--) {
+		if (strncasecmp(code, lang[i -1u].code, len) == 0)
+			return &lang[i -1u];
 	}
 
 	errno = EINVAL;
@@ -189,58 +193,38 @@ static int
 set_lang(MoeTr      *moe,
 	 const char *codes)
 {
-	const Lang *src_l, *trg_l;
-	char       *src, *trg, *p;
-	char        lcode[16];
-	size_t      len_codes;
+	const char *trg, *src;
 
-	if ((len_codes = strlen(codes) +1) >= sizeof(lcode))
+
+	src = lskip(codes);
+	if ((trg = strchr(src, ':')) == NULL)
 		goto err0;
 
-	memcpy(lcode, codes, len_codes);
-
-	if ((p = strstr(lcode, ":")) == NULL)
-		goto err0;
-
-	*p = '\0';
-	p++;
-
-	src = RLSKIP(lcode);
-	trg = RLSKIP(p);
-
-	if (*src == '\0' || *trg == '\0')
-		goto err0;
-
+	trg = lskip(trg +1u);
 	if (strcmp(trg, "auto") == 0)
 		goto err0;
 
-	if ((src_l = get_lang(src)) == NULL)
-		goto err1;
+	if ((moe->lang_src = get_lang(src, (trg -1u) - src)) == NULL)
+		return -1;
 
-	if ((trg_l = get_lang(trg)) == NULL)
-		goto err1;
-
-	moe->lang_src = src_l;
-	moe->lang_trg = trg_l;
+	if ((moe->lang_trg = get_lang(trg, strlen(trg))) == NULL)
+		return -1;
 
 	return 0;
 
 err0:
 	errno = EINVAL;
-
-err1:
 	return -1;
 }
 
 
 static int
-inet_connect(const char *addr,
-	     const char *port)
+inet_connect(MoeTr *moe)
 {
-	int fd = 0, ret;
+	int fd, ret;
 	struct addrinfo hints = { 0 }, *ai, *p = NULL;
 
-	if ((ret = getaddrinfo(addr, port, &hints, &ai)) != 0) {
+	if ((ret = getaddrinfo(URL, PORT, &hints, &ai)) != 0) {
 		fprintf(stderr, "inet_connect(): getaddrinfo: %s\n",
 			gai_strerror(ret)
 		);
@@ -274,7 +258,10 @@ inet_connect(const char *addr,
 		return -1;
 	}
 
-	return fd;
+	moe->is_connected = true;
+	moe->sock_d       = fd;
+
+	return 0;
 }
 
 
@@ -284,17 +271,16 @@ request_handler(MoeTr *moe)
 #define TEXT_ENC_LEN   (TEXT_MAX_LEN * 3)
 #define BUFFER_REQ_LEN (sizeof(HTTP_REQUEST_DETAIL) + TEXT_ENC_LEN)
 
+	int     ret = 0;
 	char    enc_text[TEXT_ENC_LEN];
 	char    req_buff[BUFFER_REQ_LEN];
-	int     ret = -1;
 
 	size_t  req_len;
-	size_t  text_len = strlen(moe->text);
-	size_t  b_total  = 0;
+	size_t  b_total;
 	ssize_t b_sent;
 
 
-	url_encode(enc_text, moe->text, text_len);
+	url_encode(enc_text, moe->text, 0);
 
 	switch (moe->result_type) {
 	case BRIEF:
@@ -316,6 +302,10 @@ request_handler(MoeTr *moe)
 		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DET_LANG,
 				enc_text);
 		break;
+
+	default:
+		errno = EINVAL;
+		return -1;
 	}
 
 	if (ret < 0) {
@@ -326,6 +316,7 @@ request_handler(MoeTr *moe)
 
 	req_len = strlen(req_buff);
 
+	b_total = 0;
 	while (b_total < req_len) {
 		if ((b_sent = send(moe->sock_d, &req_buff[b_total],
 				   req_len - b_total, 0)) < 0) {
@@ -347,10 +338,10 @@ request_handler(MoeTr *moe)
 static int
 response_handler(MoeTr *moe)
 {
-	char    *p, *h_end, *res;
-	size_t   res_len;
+	char    *p, *h_end;
 	size_t   b_total = 0;
 	ssize_t  b_recvd;
+
 
 	while (1) {
 
@@ -367,10 +358,8 @@ response_handler(MoeTr *moe)
 		b_total += (size_t)b_recvd;
 
 		if (b_total == moe->result->size) {
-			Memory *new;
-
-			new = resize_memory(&(moe->result),
-						moe->result->size + b_recvd);
+			Memory *new = resize_memory(&(moe->result),
+						moe->result->size + (size_t)b_recvd);
 
 			if (new == NULL) {
 				perror("response_handler(): realloc");
@@ -387,42 +376,28 @@ response_handler(MoeTr *moe)
 	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
 		goto err;
 
-	*p     = '\0';
-	p     += 2u;
-	h_end  = p;
-	p      = moe->result->val;
+	h_end = p +2u;
 
 	/* Check http response status */
-	if ((p = strstr(p, "200")) == NULL) {
-		fprintf(stderr, "response_handler(): Response from the server: %s\n",
-			moe->result->val
-		);
-
-		return -1;
-	}
-
-	p = strstr(h_end, "\r\n\r\n");
-	if (p == NULL)
+	if ((p = strstr(moe->result->val, "200")) == NULL)
 		goto err;
-
-	*p = '\0';
 
 	/* Skipping \r\n\r\n */
-	p += 4u;
-
-	if ((p = strstr(p, "\r\n")) == NULL)
+	if ((p = strstr(h_end, "\r\n\r\n")) == NULL)
 		goto err;
 
-	p      += 2u;
-	res     = p;
-	res_len = strlen(p);
+	if ((p = strstr(p +4u, "\r\n")) == NULL)
+		goto err;
 
-	if ((p = strstr(res, "\r\n")) == NULL)
+
+	/* Got the results */
+	moe->result->val = p +2u;
+
+
+	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
 		goto err;
 
 	*p = '\0';
-
-	memmove(moe->result->val, res, res_len);
 
 	return 0;
 
@@ -453,26 +428,24 @@ resize_memory(Memory **mem, size_t size)
 static int
 run(MoeTr *moe)
 {
-	int ret = -1;
+	int ret;
 
 	setup(moe);
 
-	if ((moe->sock_d = inet_connect(URL, PORT)) < 0)
-		goto ret;
-
-	if (request_handler(moe) < 0)
+	if ((ret = inet_connect(moe)) < 0)
 		goto cleanup;
 
-	if (response_handler(moe) < 0)
+	if ((ret = request_handler(moe)) < 0)
 		goto cleanup;
 
-	run_func[moe->output_mode](moe);
-	ret = 0;
+	if ((ret = response_handler(moe)) < 0)
+		goto cleanup;
+
+	ret = run_func[moe->output_mode](moe);
 
 cleanup:
 	cleanup(moe);
 
-ret:
 	return ret;
 }
 
@@ -480,8 +453,8 @@ ret:
 static int
 run_intrc(MoeTr *moe)
 {
-	int ret = 0;
 	Intrc_cmd prs;
+	int ret = 0;
 	char *input = NULL, *tmp;
 
 	info_intrc(moe);
@@ -629,23 +602,25 @@ err:
 }
 
 
-static void
+static int
 raw(MoeTr *moe)
 {
-	puts(moe->result->val);
+	return puts(moe->result->val);
 }
 
 
-static void
+static int
 parse(MoeTr *moe)
 {
 	cJSON *json;
 
-	if ((json = cJSON_Parse(moe->result->val)) != NULL) {
-		parse_func[moe->result_type](moe, json);
+	if ((json = cJSON_Parse(moe->result->val)) == NULL)
+		return -1;
 
-		cJSON_Delete(json);
-	}
+	parse_func[moe->result_type](moe, json);
+	cJSON_Delete(json);
+
+	return 0;
 }
 
 
@@ -726,9 +701,12 @@ parse_detail(MoeTr *moe, cJSON *json)
 
 	/* Source lang */
 	if (cJSON_IsString(src_lang)) {
+		const Lang *src_l = get_lang(src_lang->valuestring,
+					strlen(src_lang->valuestring));
+
 		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
 			src_lang->valuestring,
-			get_lang(src_lang->valuestring)->value
+			(src_l == NULL? "" : src_l->value)
 		);
 	}
 
@@ -767,7 +745,7 @@ parse_detail(MoeTr *moe, cJSON *json)
 
 		/* Verbs, Nouns, etc */
 		synn_lbl_str    = i->child->valuestring;
-		synn_lbl_str[0] = toupper(synn_lbl_str[0]);
+		synn_lbl_str[0] = toupper((unsigned char)synn_lbl_str[0]);
 
 		printf("\n" BOLD_BLUE("[ %s ]"), synn_lbl_str);
 
@@ -777,7 +755,7 @@ parse_detail(MoeTr *moe, cJSON *json)
 				break;
 
 			trg_synn_str    = trg_synn->child->valuestring;
-			trg_synn_str[0] = toupper(trg_synn_str[0]);
+			trg_synn_str[0] = toupper((unsigned char)trg_synn_str[0]);
 
 			printf("\n" BOLD_WHITE("%d. %s:") "\n  "
 				REGULAR_YELLOW("-> "), iter, trg_synn_str
@@ -822,7 +800,7 @@ defs_sect:
 		if (strlen(def_lbl_str) == 0)
 			continue;
 
-		def_lbl_str[0] = toupper(def_lbl_str[0]);
+		def_lbl_str[0] = toupper((unsigned char)def_lbl_str[0]);
 
 		printf("\n" BOLD_YELLOW("[ %s ]"), def_lbl_str);
 
@@ -834,7 +812,7 @@ defs_sect:
 			def_oths = cJSON_GetArrayItem(def_subs, 3);
 
 			def_sub_str    = def_subs->child->valuestring;
-			def_sub_str[0] = toupper(def_sub_str[0]);
+			def_sub_str[0] = toupper((unsigned char)def_sub_str[0]);
 
 			printf("\n" BOLD_WHITE("%d. %s") "\n  ", iter, def_sub_str);
 
@@ -871,7 +849,7 @@ exmpls_sect:
 				break;
 
 			exmpl_str = exmpl_vals->child->valuestring;
-			exmpl_str[0] = toupper(skip_html_tags(exmpl_str, strlen(exmpl_str))[0]);
+			exmpl_str[0] = toupper((unsigned char)skip_html_tags(exmpl_str, 0)[0]);
 
 			printf("%d. " REGULAR_YELLOW("%s") "\n",
 				iter, exmpl_str
@@ -892,11 +870,15 @@ parse_detect_lang(MoeTr *moe, cJSON *json)
 
 	cJSON *lang_src = json->child->next->next;
 
-	if (cJSON_IsString(lang_src))
+	if (cJSON_IsString(lang_src)) {
+		const Lang *src_l = get_lang(lang_src->valuestring,
+						strlen(lang_src->valuestring));
+
 		printf("%s (%s)\n",
 			lang_src->valuestring,
-			get_lang(lang_src->valuestring)->value
+			(src_l == NULL? "" : src_l->value)
 		);
+	}
 }
 
 
