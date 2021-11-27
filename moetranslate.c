@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -19,12 +20,11 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#include <editline/readline.h>
+
 #include "lib/cJSON.h"
-#include "lib/linenoise.h"
 #include "lib/util.h"
 
-
-#define RLSKIP(X) rskip(lskip(X))
 
 /* Command's results in interactive input mode */
 typedef enum {
@@ -72,7 +72,7 @@ typedef struct MoeTr {
 static void        load_config_h    (MoeTr *moe);
 static void        setup            (MoeTr *moe);
 static void        cleanup          (MoeTr *moe);
-static const Lang *get_lang         (const char *code, size_t len);
+static const Lang *get_lang         (const char *code);
 static int         set_lang         (MoeTr *moe, const char *codes);
 static int         inet_connect     (MoeTr *moe);
 static int         request_handler  (MoeTr *moe);
@@ -143,7 +143,7 @@ load_config_h(MoeTr *moe)
 		DIE("setup(): config.h: default_result_type");
 	}
 
-	if (set_lang(moe, default_langs) < 0)
+	if (set_lang(moe, cskip_l(default_langs)) < 0)
 		DIE("setup(): config.h: default_langs");
 
 	moe->output_mode = default_output_mode;
@@ -176,11 +176,10 @@ cleanup(MoeTr *moe)
 
 
 static const Lang *
-get_lang(const char *code,
-	 size_t len)
+get_lang(const char *code)
 {
 	for (size_t i = LENGTH(lang); i > 0; i--) {
-		if (strncasecmp(code, lang[i -1u].code, len) == 0)
+		if (strcasecmp(code, lang[i -1u].code) == 0)
 			return &lang[i -1u];
 	}
 
@@ -193,21 +192,28 @@ static int
 set_lang(MoeTr      *moe,
 	 const char *codes)
 {
-	const char *trg, *src;
+	char    tmp[16];
+	char   *trg, *src;
+	size_t  len = strlen(codes);
 
 
-	src = lskip(codes);
+	if (len >= sizeof(tmp))
+		goto err0;
+
+	memcpy(tmp, codes, len +1u);
+	src = cskip_a(tmp);
+
 	if ((trg = strchr(src, ':')) == NULL)
 		goto err0;
 
-	trg = lskip(trg +1u);
+	*(trg++) = '\0';
 	if (strcmp(trg, "auto") == 0)
 		goto err0;
 
-	if ((moe->lang_src = get_lang(src, (trg -1u) - src)) == NULL)
+	if ((moe->lang_src = get_lang(src)) == NULL)
 		return -1;
 
-	if ((moe->lang_trg = get_lang(trg, strlen(trg))) == NULL)
+	if ((moe->lang_trg = get_lang(trg)) == NULL)
 		return -1;
 
 	return 0;
@@ -236,14 +242,12 @@ inet_connect(MoeTr *moe)
 		fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (fd < 0) {
 			perror("inet_connect(): socket");
-
 			continue;
 		}
 
 		if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
 			perror("inet_connect(): connect");
 			close(fd);
-
 			continue;
 		}
 
@@ -254,7 +258,6 @@ inet_connect(MoeTr *moe)
 
 	if (p == NULL) {
 		fprintf(stderr, "inet_connect(): Failed to connect\n");
-
 		return -1;
 	}
 
@@ -310,7 +313,6 @@ request_handler(MoeTr *moe)
 
 	if (ret < 0) {
 		perror("request_handler(): snprintf");
-
 		return -1;
 	}
 
@@ -321,7 +323,6 @@ request_handler(MoeTr *moe)
 		if ((b_sent = send(moe->sock_d, &req_buff[b_total],
 				   req_len - b_total, 0)) < 0) {
 			perror("request_handler(): send");
-
 			return -1;
 		}
 
@@ -348,7 +349,6 @@ response_handler(MoeTr *moe)
 		if ((b_recvd = recv(moe->sock_d, &moe->result->val[b_total],
 				   moe->result->size - b_total, 0)) < 0) {
 			perror("response_handler(): recv");
-
 			return -1;
 		}
 
@@ -363,7 +363,6 @@ response_handler(MoeTr *moe)
 
 			if (new == NULL) {
 				perror("response_handler(): realloc");
-
 				return -1;
 			}
 
@@ -403,7 +402,6 @@ response_handler(MoeTr *moe)
 
 err:
 	fprintf(stderr, "response_handler(): Failed to get the contents.\n");
-
 	return -1;
 }
 
@@ -445,7 +443,6 @@ run(MoeTr *moe)
 
 cleanup:
 	cleanup(moe);
-
 	return ret;
 }
 
@@ -454,41 +451,42 @@ static int
 run_intrc(MoeTr *moe)
 {
 	Intrc_cmd prs;
-	int ret = 0;
+	int ret;
 	char *input = NULL, *tmp;
 
 	info_intrc(moe);
 
 	/* Show the results immediately if the text is not null */
 	if (moe->text != NULL) {
-		if (run(moe) < 0)
-			goto ret;
+		if ((ret = run(moe)) < 0)
+			goto ret1;
 		puts("------------------------\n");
 	}
 
+	ret = 0;
 	while (1) {
 		errno = 0;
 
-		if ((input = linenoise(PROMPT_LABEL)) == NULL)
-			break;
+		if ((input = readline(PROMPT_LABEL)) == NULL)
+			continue;
 
-		tmp = input;
-		linenoiseHistoryAdd(input);
+		add_history(input);
 
+		tmp = cskip_rl(input, 0);
 		prs = intrc_parse_cmd(moe, tmp);
 
 		if (prs == QUIT)
-			goto ret;
+			goto ret0;
 
 		if (prs == OK || prs == ERR)
 			goto free_res;
 
 		/* let's go! */
-		if (strlen((moe->text = RLSKIP(tmp))) > 0) {
+		moe->text = tmp;
+		if (*(moe->text) != '\0') {
 			puts("------------------------\n");
 
-			if ((ret = run(moe)) < 0)
-				goto ret;
+			run(moe);
 
 			puts("------------------------\n");
 		}
@@ -497,45 +495,43 @@ run_intrc(MoeTr *moe)
 		free(input);
 	}
 
-ret:
+ret0:
 	free(input);
 
+ret1:
 	return ret;
 }
 
 
 static Intrc_cmd
-intrc_parse_cmd(MoeTr *moe, const char *cmd)
+intrc_parse_cmd(MoeTr *moe,
+		const char *cmd)
 {
-	ResultType  r = 0;
-	OutputMode  d = 0;
-	const char *c = RLSKIP(cmd);
+	ResultType res;
+	OutputMode out;
 
-	if (strcmp(c, "/") == 0)
-		goto info;
 
-	if (strcmp(c, "/q") == 0)
-		goto quit;
+	/* Summaries */
+	if (*(cmd++) == '/') {
+		switch (*cmd) {
+		case '\0': goto info;
+		case 'q' : { if (*(cmd +1u) == '\0') goto quit; } break;
+		case 'h' : { if (*(cmd +1u) == '\0') goto help; } break;
+		case 'c' : goto ch_lang;
+		case 'o' : goto ch_output;
+		case 'r' : goto ch_result;
+		}
 
-	if (strcmp(c, "/h") == 0)
-		goto help;
-
-	if (strncmp(c, "/c", 2) == 0)
-		goto ch_lang;
-
-	if (strncmp(c, "/o", 2) == 0)
-		goto ch_output;
-
-	if (strncmp(c, "/r", 2) == 0)
-		goto ch_result;
-
+		goto err;
+	}
 
 	/* Default return */
 	return MISS;
 
+
+	/* Implementations */
 info:
 	info_intrc(moe);
-
 	return OK;
 
 quit:
@@ -543,11 +539,10 @@ quit:
 
 help:
 	help_intrc(moe);
-
 	return OK;
 
 ch_lang:
-	if (set_lang(moe, c +2) < 0)
+	if (set_lang(moe, cmd +1u) < 0)
 		goto err;
 	
 	printf("\nLanguage changed: "
@@ -555,49 +550,45 @@ ch_lang:
 		REGULAR_GREEN("[%s]") " \n\n",
 		moe->lang_src->code, moe->lang_trg->code
 	);
-
 	return OK;
 
 ch_output:
-	d = atoi(c +2);
+	out = atoi(cmd +1u);
 
-	switch (d) {
+	switch (out) {
 	case PARSE: moe->output_mode = PARSE; break;
-	case RAW:   moe->output_mode = RAW  ; break;
-	default:    goto err;
+	case RAW  : moe->output_mode = RAW  ; break;
+	default   : goto err;
 	}
 
 	printf("\nMode output changed: "
 		REGULAR_YELLOW("%s")
 		"\n\n",
-		output_mode_str[d]
+		output_mode_str[out]
 	);
-
 	return OK;
 
 ch_result:
-	r = atoi(c +2);
+	res = atoi(cmd +1u);
 
-	switch (r) {
-	case BRIEF:    moe->result_type = BRIEF   ; break;
-	case DETAIL:   moe->result_type = DETAIL  ; break;
+	switch (res) {
+	case BRIEF   : moe->result_type = BRIEF   ; break;
+	case DETAIL  : moe->result_type = DETAIL  ; break;
 	case DET_LANG: moe->result_type = DET_LANG; break;
-	default:       goto err;
+	default      : goto err;
 	}
 
 	printf("\nResult type changed: "
 		REGULAR_YELLOW("%s")
 		"\n\n",
-		result_type_str[r]
+		result_type_str[res]
 	);
-
 	return OK;
 
 
 err:
 	errno = EINVAL;
 	perror("Error");
-
 	return ERR;
 }
 
@@ -619,7 +610,6 @@ parse(MoeTr *moe)
 
 	parse_func[moe->result_type](moe, json);
 	cJSON_Delete(json);
-
 	return 0;
 }
 
@@ -701,12 +691,11 @@ parse_detail(MoeTr *moe, cJSON *json)
 
 	/* Source lang */
 	if (cJSON_IsString(src_lang)) {
-		const Lang *src_l = get_lang(src_lang->valuestring,
-					strlen(src_lang->valuestring));
+		const Lang *src_l = get_lang(src_lang->valuestring);
 
 		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
 			src_lang->valuestring,
-			(src_l == NULL? "" : src_l->value)
+			(src_l == NULL? "Unknown" : src_l->value)
 		);
 	}
 
@@ -871,8 +860,7 @@ parse_detect_lang(MoeTr *moe, cJSON *json)
 	cJSON *lang_src = json->child->next->next;
 
 	if (cJSON_IsString(lang_src)) {
-		const Lang *src_l = get_lang(lang_src->valuestring,
-						strlen(lang_src->valuestring));
+		const Lang *src_l = get_lang(lang_src->valuestring);
 
 		printf("%s (%s)\n",
 			lang_src->valuestring,
@@ -972,43 +960,38 @@ main(int argc, char *argv[])
 	if (argc == 1)
 		goto einv0;
 
+	setlocale(LC_CTYPE, "");
 	load_config_h(&moe);
 
 	while ((opt = getopt(argc, argv, "b:f:d:rih")) != -1) {
 		switch (opt) {
 		case 'b':
 			moe.result_type = BRIEF;
-			if (set_lang(&moe, argv[optind -1]) < 0)
+			if (set_lang(&moe, cskip_l(argv[optind -1])) < 0)
 				goto einv1;
-
 			break;
 
 		case 'f':
 			moe.result_type = DETAIL;
-			if (set_lang(&moe, argv[optind -1]) < 0)
+			if (set_lang(&moe, cskip_l(argv[optind -1])) < 0)
 				goto einv1;
-
 			break;
 
 		case 'd':
 			moe.result_type = DET_LANG;
 			is_detc         = true;
-
 			break;
 
 		case 'r':
 			moe.output_mode = RAW;
-
 			break;
 
 		case 'i':
 			is_intrc = true;
-
 			break;
 
 		case 'h':
 			help();
-
 			return EXIT_SUCCESS;
 
 		default:
@@ -1018,11 +1001,9 @@ main(int argc, char *argv[])
 
 
 	if (is_detc)
-		moe.text = RLSKIP(argv[optind -1]);
-
+		moe.text = cskip_rl(argv[optind -1], 0);
 	else if (optind < argc)
-		moe.text = RLSKIP(argv[optind]);
-
+		moe.text = cskip_rl(argv[optind], 0);
 	else
 		moe.text = NULL;
 

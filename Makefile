@@ -14,7 +14,7 @@ CC        = cc
 CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
 	    -D_POSIX_C_SOURCE=200809L -O3
 
-SRC       = moetranslate.c lib/cJSON.c lib/util.c lib/linenoise.c
+SRC       = moetranslate.c lib/cJSON.c lib/util.c
 OBJ       = $(SRC:.c=.o)
 
 FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h lib/
@@ -45,7 +45,7 @@ util.o: util.c util.h
 
 $(TARGET): $(OBJ)
 	@printf "\n%s\n" "Linking: $(^)..."
-	$(CC) -o $(@) $(^)
+	$(CC) -o $(@) $(^) -ledit
 # ------------------------------------------------------------------- #
 
 options:

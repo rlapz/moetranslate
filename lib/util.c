@@ -6,26 +6,60 @@
 
 /* left skip */
 char *
-lskip(const char *str)
+cskip_l(const char *dest)
 {
-	while (*str && isspace((unsigned char)(*str)))
-		str++;
+	while (*dest && isspace((unsigned char)(*dest)))
+		dest++;
 
-	return (char *)str;
+	return (char *)dest;
 }
 
 /* right skip */
 char *
-rskip(char *str)
+cskip_r(char *dest,
+	size_t len)
 {
-	char *end = str + strlen(str) -1;
+	char *end;
 
-	while (end > str && isspace((unsigned char)(*end)))
+	if (len == 0)
+		len = strlen(dest);
+
+	end = dest + (len -1u);
+	while (end > dest && isspace((unsigned char)(*end)))
 		end--;
 
-	*(end +1) = '\0';
+	*(end +1u) = '\0';
 
-	return str;
+	return dest;
+}
+
+/* right + left skip */
+char *
+cskip_rl(char *dest,
+	 size_t len)
+{
+	return cskip_l(cskip_r(dest, len));
+}
+
+/* skip all */
+char *
+cskip_a(char *dest)
+{
+	char *p = dest;
+	char *s = dest;
+
+	while (*p != '\0') {
+		if (isspace((unsigned char)*p)) {
+			p++;
+
+			continue;
+		}
+
+		*(s++) = *(p++);
+	}
+	*s = '\0';
+
+	return dest;
 }
 
 /* skipping html tags ( <b>...</b> ) */

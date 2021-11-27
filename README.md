@@ -7,6 +7,12 @@ A simple language translator written in C
 ## Currently Supported:
 1. Google Translate API
 
+## Required Package(s)
+
+```
+libedit (https://thrysoee.dk/editline/)
+```
+
 ## How to Install:
 
 ```
