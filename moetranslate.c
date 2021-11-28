@@ -316,8 +316,7 @@ request_handler(MoeTr *moe)
 		return -1;
 	}
 
-	req_len = strlen(req_buff);
-
+	req_len = (size_t)ret;
 	b_total = 0;
 	while (b_total < req_len) {
 		if ((b_sent = send(moe->sock_d, &req_buff[b_total],
@@ -774,7 +773,6 @@ defs_sect:
 	printf("\n------------------------");
 
 	cJSON_ArrayForEach(i, defs) {
-			cJSON_Print(i);
 		int iter     = 1;
 		int defs_max = DEFINITION_MAX_LINE;
 
