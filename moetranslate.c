@@ -264,7 +264,7 @@ inet_connect(MoeTr *moe)
 	moe->is_connected = true;
 	moe->sock_d       = fd;
 
-	return 0;
+	return fd;
 }
 
 
@@ -451,8 +451,8 @@ static int
 run_intrc(MoeTr *moe)
 {
 	Intrc_cmd prs;
-	int ret;
-	char *input = NULL, *tmp;
+	int       ret;
+	char     *input, *tmp;
 
 	info_intrc(moe);
 
@@ -547,7 +547,7 @@ ch_lang:
 	if (set_lang(moe, cmd +1u) < 0)
 		goto err;
 	
-	printf("\nLanguage changed: "
+	printf("\nThe Languages has been changed: "
 		REGULAR_GREEN("[%s]") " -> "
 		REGULAR_GREEN("[%s]") " \n\n",
 		moe->lang_src->code, moe->lang_trg->code
@@ -563,7 +563,7 @@ ch_output:
 	default   : goto err;
 	}
 
-	printf("\nMode output changed: "
+	printf("\nMode output has been changed: "
 		REGULAR_YELLOW("%s")
 		"\n\n",
 		output_mode_str[out]
@@ -580,7 +580,7 @@ ch_result:
 	default      : goto err;
 	}
 
-	printf("\nResult type changed: "
+	printf("\nResult type has been changed: "
 		REGULAR_YELLOW("%s")
 		"\n\n",
 		result_type_str[res]
@@ -866,7 +866,7 @@ parse_detect_lang(MoeTr *moe, cJSON *json)
 
 		printf("%s (%s)\n",
 			lang_src->valuestring,
-			(src_l == NULL? "" : src_l->value)
+			(src_l == NULL? "Unknown" : src_l->value)
 		);
 	}
 }
@@ -1021,7 +1021,6 @@ main(int argc, char *argv[])
 	} else {
 		goto einv0;
 	}
-
 
 	return EXIT_SUCCESS;
 
