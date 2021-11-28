@@ -31,10 +31,6 @@ moetranslate.o: $(TARGET).c
 	@printf "\n%s\n" "Compiling: $(<)..."
 	$(CC) $(CFLAGS) -c -o $(@) $(<)
 
-linenoise.o: linenoise.c linenoise.h
-	@printf "\n%s\n" "Compiling: $(<)..."
-	$(CC) $(CFLAGS) -c -o $(@) $(<)
-
 cJSON.o: cJSON.c cJSON.h
 	@printf "\n%s\n" "Compiling: $(<)..."
 	$(CC) $(CFLAGS) -c -o $(@) $(<)

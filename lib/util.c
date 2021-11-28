@@ -64,7 +64,7 @@ cskip_a(char *dest)
 
 /* skipping html tags ( <b>...</b> ) */
 char *
-skip_html_tags(char *dest,
+cskip_html_tags(char *dest,
 	       size_t len)
 {
 	const struct {

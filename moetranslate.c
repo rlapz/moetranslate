@@ -671,8 +671,8 @@ parse_detail(MoeTr *moe, cJSON *json)
 	cJSON *src_synn;
 	cJSON *trg_synn;
 	cJSON *def_subs;
+	cJSON *def_cre;
 	cJSON *def_vals;
-	cJSON *def_oths;
 	cJSON *exmpl_vals;
 
 	/* Source text */
@@ -727,29 +727,22 @@ parse_detail(MoeTr *moe, cJSON *json)
 
 	printf("\n------------------------");
 
-	/* Labels */
-	char *synn_lbl_str, *trg_synn_str;
-
 	cJSON_ArrayForEach(i, synms) {
 		int iter     = 1;
 		int synn_max = SYNONYM_MAX_LINE;
 
 		/* Verbs, Nouns, etc */
-		synn_lbl_str    = i->child->valuestring;
-		synn_lbl_str[0] = toupper((unsigned char)synn_lbl_str[0]);
-
-		printf("\n" BOLD_BLUE("[ %s ]"), synn_lbl_str);
+		SUBTITLE(i->child->valuestring);
+		printf("\n" BOLD_BLUE("[ %s ]"), i->child->valuestring);
 
 		/* Target alternatives */
 		cJSON_ArrayForEach(trg_synn, cJSON_GetArrayItem(i, 2)) {
 			if (synn_max == 0)
 				break;
 
-			trg_synn_str    = trg_synn->child->valuestring;
-			trg_synn_str[0] = toupper((unsigned char)trg_synn_str[0]);
-
-			printf("\n" BOLD_WHITE("%d. %s:") "\n  "
-				REGULAR_YELLOW("-> "), iter, trg_synn_str
+			SUBTITLE(trg_synn->child->valuestring);
+			printf("\n" BOLD_WHITE("%d. %s:") "\n   "
+				REGULAR_YELLOW("-> "), iter, trg_synn->child->valuestring
 			);
 
 			/* Source alternatives */
@@ -780,42 +773,41 @@ defs_sect:
 
 	printf("\n------------------------");
 
-	char *def_lbl_str, *def_sub_str;
-
 	cJSON_ArrayForEach(i, defs) {
+			cJSON_Print(i);
 		int iter     = 1;
 		int defs_max = DEFINITION_MAX_LINE;
 
-		def_lbl_str = i->child->valuestring;
-
-		if (strlen(def_lbl_str) == 0)
+		if (strlen(i->child->valuestring) == 0)
 			continue;
 
-		def_lbl_str[0] = toupper((unsigned char)def_lbl_str[0]);
-
-		printf("\n" BOLD_YELLOW("[ %s ]"), def_lbl_str);
+		SUBTITLE(i->child->valuestring);
+		printf("\n" BOLD_YELLOW("[ %s ]"), i->child->valuestring);
 
 		cJSON_ArrayForEach(def_subs, cJSON_GetArrayItem(i, 1)) {
 			if (defs_max == 0)
 				break;
 
-			def_vals = cJSON_GetArrayItem(def_subs, 2);
-			def_oths = cJSON_GetArrayItem(def_subs, 3);
+			SUBTITLE(def_subs->child->valuestring);
+			printf("\n" BOLD_WHITE("%d. %s"),
+				iter, def_subs->child->valuestring
+			);
 
-			def_sub_str    = def_subs->child->valuestring;
-			def_sub_str[0] = toupper((unsigned char)def_sub_str[0]);
+			def_cre = cJSON_GetArrayItem(def_subs, 3);
+			if (cJSON_IsArray(def_cre) &&
+					cJSON_IsString(def_cre->child->child)) {
 
-			printf("\n" BOLD_WHITE("%d. %s") "\n  ", iter, def_sub_str);
-
-			if (cJSON_IsString(def_vals))
-				printf(REGULAR_YELLOW("->") " %s ", def_vals->valuestring);
-
-			if (cJSON_IsArray(def_oths) &&
-					cJSON_IsString(def_oths->child->child)) {
-
-				printf(REGULAR_GREEN("[ %s ]"),
-					def_oths->child->child->valuestring
+				printf(REGULAR_GREEN(" [ %s ]") "\n   ",
+					def_cre->child->child->valuestring
 				);
+			} else {
+				printf("\n   ");
+			}
+
+			def_vals = cJSON_GetArrayItem(def_subs, 2);
+			if (cJSON_IsString(def_vals)) {
+				SUBTITLE(def_vals->valuestring);
+				printf(REGULAR_YELLOW("->") " %s ", def_vals->valuestring);
 			}
 			iter++;
 			defs_max--;
@@ -832,18 +824,15 @@ exmpls_sect:
 	printf("\n------------------------\n");
 
 	int iter = 1, exmpls_max = EXAMPLE_MAX_LINE;
-	char *exmpl_str;
 
 	cJSON_ArrayForEach(i, exmpls) {
 		cJSON_ArrayForEach(exmpl_vals, i) {
 			if (exmpls_max == 0)
 				break;
 
-			exmpl_str = exmpl_vals->child->valuestring;
-			exmpl_str[0] = toupper((unsigned char)skip_html_tags(exmpl_str, 0)[0]);
-
+			SUBTITLE(cskip_html_tags(exmpl_vals->child->valuestring, 0));
 			printf("%d. " REGULAR_YELLOW("%s") "\n",
-				iter, exmpl_str
+				iter, exmpl_vals->child->valuestring
 			);
 
 			iter++;
