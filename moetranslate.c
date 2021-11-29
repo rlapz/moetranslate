@@ -208,11 +208,13 @@ set_lang(MoeTr      *moe,
 
 	*(trg++) = '\0';
 
-	if (*src == '\0')
-		src = (char *)moe->lang_src->code;
+	if (moe->lang_src != NULL || moe->lang_trg != NULL) {
+		if (*src == '\0')
+			src = (char *)moe->lang_src->code;
 
-	if (*trg == '\0')
-		trg = (char *)moe->lang_trg->code;
+		if (*trg == '\0')
+			trg = (char *)moe->lang_trg->code;
+	}
 
 	if (strcmp(trg, "auto") == 0) {
 		fprintf(stderr, "Target language cannot be \"auto\"\n");
