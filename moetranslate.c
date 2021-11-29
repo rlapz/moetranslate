@@ -207,8 +207,17 @@ set_lang(MoeTr      *moe,
 		goto err0;
 
 	*(trg++) = '\0';
-	if (strcmp(trg, "auto") == 0)
-		goto err0;
+
+	if (*src == '\0')
+		src = (char *)moe->lang_src->code;
+
+	if (*trg == '\0')
+		trg = (char *)moe->lang_trg->code;
+
+	if (strcmp(trg, "auto") == 0) {
+		fprintf(stderr, "Target language cannot be \"auto\"\n");
+		return -1;
+	}
 
 	if ((moe->lang_src = get_lang(src)) == NULL)
 		return -1;
@@ -228,7 +237,12 @@ static int
 inet_connect(MoeTr *moe)
 {
 	int fd, ret;
-	struct addrinfo hints = { 0 }, *ai, *p = NULL;
+	struct addrinfo hints = {
+		.ai_family   = AF_UNSPEC,
+		.ai_socktype = SOCK_STREAM,
+	};
+	struct addrinfo *ai, *p = NULL;
+
 
 	if ((ret = getaddrinfo(URL, PORT, &hints, &ai)) != 0) {
 		fprintf(stderr, "inet_connect(): getaddrinfo: %s\n",
