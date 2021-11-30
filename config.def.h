@@ -14,8 +14,8 @@ static const ResultType  default_result_type = DETAIL   ;
 static const OutputMode  default_output_mode = PARSE    ;
 
 
-#define PROMPT_LABEL          "-> " /* Prompt label                                     */
-#define BUFFER_SIZE           1024u /* Buffer size (growable)                           */
+#define PROMPT_LABEL          "-> "
+#define BUFFER_SIZE           1024u
 #define TEXT_MAX_LEN          4096u /* Max input text length                            */
 #define DEFINITION_MAX_LINE   -1    /* Definition max lines, 0 = disable, -1 = show all */
 #define EXAMPLE_MAX_LINE      5     /* Example max lines,    0 = disable, -1 = show all */
@@ -52,10 +52,10 @@ static const OutputMode  default_output_mode = PARSE    ;
 
 /* Colors */
 /* See: https://en.wikipedia.org/wiki/ANSI_escape_code */
-#define BLUE_COLOR           "34"
-#define GREEN_COLOR          "32"
-#define WHITE_COLOR          "37"
-#define YELLOW_COLOR         "33"
+#define BLUE_COLOR            "34"
+#define GREEN_COLOR           "32"
+#define WHITE_COLOR           "37"
+#define YELLOW_COLOR          "33"
 
 /* 17+1 109 */
 static const Lang lang[] = {

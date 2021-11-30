@@ -26,6 +26,7 @@
 #include "lib/util.h"
 
 
+
 /* Command's results in interactive input mode */
 typedef enum {
 	OK  = 1,
@@ -61,10 +62,9 @@ typedef struct MoeTr {
 	OutputMode  output_mode ;
 	int         sock_d      ;
 	const char *text        ;
-	char       *request     ;
-	Memory     *result      ;
 	const Lang *lang_src    ;
 	const Lang *lang_trg    ;
+	Memory     *result      ;
 } MoeTr;
 
 
@@ -127,6 +127,15 @@ static void (*const parse_func[])(MoeTr *, cJSON *) = {
 	[DETAIL]   = parse_detail,
 	[DET_LANG] = parse_detect_lang
 };
+
+static char prompt_intrc[16u + sizeof(PROMPT_LABEL)];
+
+
+#define SET_LANG_PROMPT(SRC, TRG)\
+	snprintf(prompt_intrc, sizeof(prompt_intrc), \
+		"[ %s:%s ]%s", SRC, TRG, PROMPT_LABEL  \
+	)
+
 
 
 /* function implementations */
@@ -263,6 +272,7 @@ inet_connect(MoeTr *moe)
 
 		if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
 			perror("inet_connect(): connect");
+			fprintf(stderr, "Retrying...\n");
 			close(fd);
 			continue;
 		}
@@ -359,16 +369,12 @@ response_handler(MoeTr *moe)
 	ssize_t  b_recvd;
 
 
-	while (1) {
-
+	do {
 		if ((b_recvd = recv(moe->sock_d, &moe->result->val[b_total],
 				   moe->result->size - b_total, 0)) < 0) {
 			perror("response_handler(): recv");
 			return -1;
 		}
-
-		if (b_recvd == 0)
-			break;
 
 		b_total += (size_t)b_recvd;
 
@@ -383,7 +389,8 @@ response_handler(MoeTr *moe)
 
 			moe->result = new;
 		}
-	}
+
+	} while (b_recvd > 0);
 
 	moe->result->val[b_total] = '\0';
 
@@ -470,6 +477,7 @@ run_intrc(MoeTr *moe)
 	char     *input, *tmp;
 
 	info_intrc(moe);
+	SET_LANG_PROMPT(moe->lang_src->code, moe->lang_trg->code);
 
 	/* Show the results immediately if the text is not null */
 	if (moe->text != NULL) {
@@ -482,7 +490,7 @@ run_intrc(MoeTr *moe)
 	while (1) {
 		errno = 0;
 
-		if ((input = readline(PROMPT_LABEL)) == NULL) {
+		if ((input = readline(prompt_intrc)) == NULL) {
 			putchar('\n');
 			goto ret0;
 		}
@@ -561,12 +569,9 @@ help:
 ch_lang:
 	if (set_lang(moe, cmd +1u) < 0)
 		goto err;
-	
-	printf("\nThe Languages has been changed: "
-		REGULAR_GREEN("[%s]") " -> "
-		REGULAR_GREEN("[%s]") " \n\n",
-		moe->lang_src->code, moe->lang_trg->code
-	);
+
+	SET_LANG_PROMPT(moe->lang_src->code, moe->lang_trg->code);
+
 	return OK;
 
 ch_output:
@@ -747,8 +752,14 @@ parse_detail(MoeTr *moe, cJSON *json)
 		int synn_max = SYNONYM_MAX_LINE;
 
 		/* Verbs, Nouns, etc */
-		SUBTITLE(i->child->valuestring);
-		printf("\n" BOLD_BLUE("[ %s ]"), i->child->valuestring);
+		if (*(i->child->valuestring) == '\0') {
+			/* No label */
+			printf("\n" BOLD_BLUE("[ + ]"));
+
+		} else {
+			SUBTITLE(i->child->valuestring);
+			printf("\n" BOLD_BLUE("[ %s ]"), i->child->valuestring);
+		}
 
 		/* Target alternatives */
 		cJSON_ArrayForEach(trg_synn, cJSON_GetArrayItem(i, 2)) {
@@ -792,11 +803,15 @@ defs_sect:
 		int iter     = 1;
 		int defs_max = DEFINITION_MAX_LINE;
 
-		if (strlen(i->child->valuestring) == 0)
-			continue;
 
-		SUBTITLE(i->child->valuestring);
-		printf("\n" BOLD_YELLOW("[ %s ]"), i->child->valuestring);
+		if (*(i->child->valuestring) == '\0') {
+			/* No label */
+			printf("\n" BOLD_YELLOW("[ + ]"));
+
+		} else {
+			SUBTITLE(i->child->valuestring);
+			printf("\n" BOLD_YELLOW("[ %s ]"), i->child->valuestring);
+		}
 
 		cJSON_ArrayForEach(def_subs, cJSON_GetArrayItem(i, 1)) {
 			if (defs_max == 0)
@@ -811,18 +826,17 @@ defs_sect:
 			if (cJSON_IsArray(def_cre) &&
 					cJSON_IsString(def_cre->child->child)) {
 
-				printf(REGULAR_GREEN(" [ %s ]") "\n   ",
+				printf(REGULAR_GREEN(" [ %s ]") "\n",
 					def_cre->child->child->valuestring
 				);
-			} else {
-				printf("\n   ");
 			}
 
 			def_vals = cJSON_GetArrayItem(def_subs, 2);
 			if (cJSON_IsString(def_vals)) {
 				SUBTITLE(def_vals->valuestring);
-				printf(REGULAR_YELLOW("->") " %s ", def_vals->valuestring);
+				printf("\n" REGULAR_YELLOW("   ->") " %s ", def_vals->valuestring);
 			}
+
 			iter++;
 			defs_max--;
 		}
@@ -936,16 +950,19 @@ static void
 info_intrc(const MoeTr *moe)
 {
 	printf(BOLD_WHITE("----[ Moetranslate ]----")
-	        "\n"
+		"\n"
 	        BOLD_YELLOW("Interactive input mode")
 	        "\n\n"
-	        BOLD_WHITE("Language    :") " [%s:%s]\n"
+	        BOLD_WHITE("Languages   :")
+		                        " %s (%s)\n"
+		           "              %s (%s)\n"
 	        BOLD_WHITE("Result type :") " %s\n"
 	        BOLD_WHITE("Output mode :") " %s\n"
 		BOLD_WHITE("Show help   :") " Type /h\n\n"
 	        "------------------------\n",
 
-	        moe->lang_src->code, moe->lang_trg->code,
+	        moe->lang_src->value, moe->lang_src->code,
+		moe->lang_trg->value, moe->lang_trg->code,
 		result_type_str[moe->result_type],
 	        output_mode_str[moe->output_mode]
 	);
