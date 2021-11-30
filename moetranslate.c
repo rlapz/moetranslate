@@ -826,7 +826,7 @@ defs_sect:
 			if (cJSON_IsArray(def_cre) &&
 					cJSON_IsString(def_cre->child->child)) {
 
-				printf(REGULAR_GREEN(" [ %s ]") "\n",
+				printf(REGULAR_GREEN(" [ %s ]"),
 					def_cre->child->child->valuestring
 				);
 			}
