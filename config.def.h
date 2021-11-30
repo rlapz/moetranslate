@@ -6,19 +6,23 @@
  */
 
 
-/* Output Mode : PARSE, RAW                                 */
-/* Result Type : BRIEF, DETAIL, DETECT_LANG                 */
-/* ...........................................source:target */
-static const char *const default_langs       = "auto:en";
-static const ResultType  default_result_type = DETAIL   ;
-static const OutputMode  default_output_mode = PARSE    ;
+/* Default Langs:
+ *   default_lang_src: Default source language
+ *   default_lang_trg: Default target language
+ * Output Mode       : PARSE, RAW
+ * Result Type       : BRIEF, DETAIL, DETECT_LANG
+ */
+static const char *const default_lang_src    = "auto";
+static const char *const default_lang_trg    = "en"  ;
+static const ResultType  default_result_type = DETAIL;
+static const OutputMode  default_output_mode = PARSE ;
 
 
 #define PROMPT_LABEL          "-> "
 #define BUFFER_SIZE           1024u
 #define TEXT_MAX_LEN          4096u /* Max input text length                            */
 #define DEFINITION_MAX_LINE   -1    /* Definition max lines, 0 = disable, -1 = show all */
-#define EXAMPLE_MAX_LINE      5     /* Example max lines,    0 = disable, -1 = show all */
+#define EXAMPLE_MAX_LINE      -1    /* Example max lines,    0 = disable, -1 = show all */
 #define SYNONYM_MAX_LINE      -1    /* Synonym max lines,    0 = disable, -1 = show all */
 
 

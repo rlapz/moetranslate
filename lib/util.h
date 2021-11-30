@@ -1,9 +1,3 @@
-#define DIE(msg)\
-	do {                       \
-		perror(msg);       \
-		exit(EXIT_FAILURE);\
-	} while (0)
-
 #define LENGTH(X)   (sizeof(X) / sizeof(X[0]))
 #define SUBTITLE(X) (X[0] = toupper((unsigned char)X[0]))
 

@@ -69,6 +69,7 @@ typedef struct MoeTr {
 
 
 /* function declarations */
+static void        die              (const char *msg);
 static void        load_config_h    (MoeTr *moe);
 static void        setup            (MoeTr *moe);
 static void        cleanup          (MoeTr *moe);
@@ -106,6 +107,8 @@ static void        info_intrc       (const MoeTr *moe);
 
 
 /* global variables */
+static char prompt_intrc[16u + sizeof(PROMPT_LABEL)];
+
 static const char *const result_type_str[] = {
 	[BRIEF]    = "Brief",
 	[DETAIL]   = "Detail",
@@ -117,6 +120,7 @@ static const char *const output_mode_str[] = {
 	[RAW]   = "Raw"
 };
 
+/* function array */
 static int (*const run_func[])(MoeTr *) = {
 	[PARSE] = parse,
 	[RAW]   = raw
@@ -128,8 +132,6 @@ static void (*const parse_func[])(MoeTr *, cJSON *) = {
 	[DET_LANG] = parse_detect_lang
 };
 
-static char prompt_intrc[16u + sizeof(PROMPT_LABEL)];
-
 
 #define SET_LANG_PROMPT(SRC, TRG)\
 	snprintf(prompt_intrc, sizeof(prompt_intrc), \
@@ -140,20 +142,37 @@ static char prompt_intrc[16u + sizeof(PROMPT_LABEL)];
 
 /* function implementations */
 static void
+die(const char *msg)
+{
+	perror(msg);
+	exit(EXIT_FAILURE);
+}
+
+
+static void
 load_config_h(MoeTr *moe)
 {
-	if (default_output_mode <= 0 || default_output_mode > RAW) {
+	if (default_output_mode < PARSE || default_output_mode > RAW) {
 		errno = EINVAL;
-		DIE("setup(): config.h: default_output_mode");
+		die("setup(): config.h: default_output_mode");
 	}
 
-	if (default_result_type <= 0 || default_result_type > DET_LANG ) {
+	if (default_result_type < BRIEF || default_result_type > DET_LANG ) {
 		errno = EINVAL;
-		DIE("setup(): config.h: default_result_type");
+		die("setup(): config.h: default_result_type");
 	}
 
-	if (set_lang(moe, cskip_l(default_langs)) < 0)
-		DIE("setup(): config.h: default_langs");
+	if ((moe->lang_src = get_lang(default_lang_src)) == NULL)
+		die("setup(): config.h: default_lang_src");
+
+	if (strcmp(default_lang_trg, "auto") == 0) {
+		errno = EINVAL;
+		die("setup(): config.h: default_lang_trg cannot be \"auto\"");
+	}
+
+	if ((moe->lang_trg = get_lang(default_lang_trg)) == NULL)
+		die("setup(): config.h: default_lang_src");
+
 
 	moe->output_mode = default_output_mode;
 	moe->result_type = default_result_type;
@@ -165,7 +184,7 @@ setup(MoeTr *moe)
 {
 	moe->result = calloc(1u, sizeof(Memory) + BUFFER_SIZE);
 	if (moe->result == NULL)
-		DIE("setup(): malloc");
+		die("setup(): malloc");
 
 	moe->result->size = BUFFER_SIZE;
 	moe->result->val  = (char *)moe->result + sizeof(Memory);
@@ -201,9 +220,10 @@ static int
 set_lang(MoeTr      *moe,
 	 const char *codes)
 {
-	char    tmp[16];
-	char   *trg, *src;
-	size_t  len = strlen(codes);
+	char        tmp[16];
+	char       *src, *trg;
+	const Lang *l_src, *l_trg;
+	size_t      len = strlen(codes);
 
 
 	if (len >= sizeof(tmp))
@@ -217,24 +237,29 @@ set_lang(MoeTr      *moe,
 
 	*(trg++) = '\0';
 
-	if (moe->lang_src != NULL || moe->lang_trg != NULL) {
-		if (*src == '\0')
-			src = (char *)moe->lang_src->code;
 
-		if (*trg == '\0')
-			trg = (char *)moe->lang_trg->code;
+	if (*src != '\0' && strcmp(src, moe->lang_src->code) != 0) {
+		if ((l_src = get_lang(src)) == NULL) {
+			fprintf(stderr, "Unknown \"%s\" language code\n", src);
+			return -1;
+		}
+
+		moe->lang_src = l_src;
 	}
 
-	if (strcmp(trg, "auto") == 0) {
-		fprintf(stderr, "Target language cannot be \"auto\"\n");
-		return -1;
+	if (*trg != '\0' && strcmp(trg, moe->lang_trg->code) != 0) {
+		if (strcmp(trg, "auto") == 0) {
+			fprintf(stderr, "Target language cannot be \"auto\"\n");
+			goto err0;
+		}
+
+		if ((l_trg = get_lang(trg)) == NULL) {
+			fprintf(stderr, "Unknown \"%s\" language code\n", trg);
+			return -1;
+		}
+
+		moe->lang_trg = l_trg;
 	}
-
-	if ((moe->lang_src = get_lang(src)) == NULL)
-		return -1;
-
-	if ((moe->lang_trg = get_lang(trg)) == NULL)
-		return -1;
 
 	return 0;
 
@@ -610,7 +635,8 @@ ch_result:
 
 err:
 	errno = EINVAL;
-	perror("Error");
+	perror(NULL);
+	putchar('\n');
 	return ERR;
 }
 
@@ -631,6 +657,7 @@ parse(MoeTr *moe)
 		return -1;
 
 	parse_func[moe->result_type](moe, json);
+
 	cJSON_Delete(json);
 	return 0;
 }
