@@ -58,7 +58,7 @@ static const OutputMode  default_output_mode = PARSE ;
 /* See: https://en.wikipedia.org/wiki/ANSI_escape_code */
 #define BLUE_COLOR            "34"
 #define GREEN_COLOR           "32"
-#define WHITE_COLOR           "37"
+#define WHITE_COLOR           "39"
 #define YELLOW_COLOR          "33"
 
 /* 17+1 109 */
