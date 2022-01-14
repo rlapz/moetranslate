@@ -47,8 +47,8 @@ typedef enum {
 } OutputMode;
 
 typedef struct {
-	char   *val ;
-	size_t  size;
+	size_t size ;
+	char   val[];
 } Memory;
 
 typedef struct {
@@ -64,7 +64,8 @@ typedef struct MoeTr {
 	const char *text        ;
 	const Lang *lang_src    ;
 	const Lang *lang_trg    ;
-	Memory     *result      ;
+	Memory     *memory      ;
+	char       *result      ;
 } MoeTr;
 
 
@@ -141,7 +142,7 @@ static void (*const parse_func[])(MoeTr *, cJSON *) = {
 
 
 /* function implementations */
-static void
+static inline void
 die(const char *msg)
 {
 	perror(msg);
@@ -182,12 +183,11 @@ load_config_h(MoeTr *moe)
 static void
 setup(MoeTr *moe)
 {
-	moe->result = calloc(1u, sizeof(Memory) + BUFFER_SIZE);
-	if (moe->result == NULL)
+	moe->memory = calloc(1u, sizeof(Memory) + BUFFER_SIZE);
+	if (moe->memory == NULL)
 		die("setup(): malloc");
 
-	moe->result->size = BUFFER_SIZE;
-	moe->result->val  = (char *)moe->result + sizeof(Memory);
+	moe->memory->size = BUFFER_SIZE;
 	moe->is_connected = false;
 }
 
@@ -195,15 +195,15 @@ setup(MoeTr *moe)
 static void
 cleanup(MoeTr *moe)
 {
-	if (moe->result != NULL)
-		free(moe->result);
+	if (moe->memory != NULL)
+		free(moe->memory);
 
 	if (moe->is_connected)
 		close(moe->sock_d);
 }
 
 
-static const Lang *
+static inline const Lang *
 get_lang(const char *code)
 {
 	for (size_t i = LENGTH(lang); i > 0; i--) {
@@ -395,37 +395,39 @@ response_handler(MoeTr *moe)
 
 
 	do {
-		if ((b_recvd = recv(moe->sock_d, &moe->result->val[b_total],
-				   moe->result->size - b_total, 0)) < 0) {
+		if ((b_recvd = recv(moe->sock_d, &moe->memory->val[b_total],
+				   moe->memory->size - b_total, 0)) < 0) {
 			perror("response_handler(): recv");
-			return -1;
+			goto err;
 		}
 
 		b_total += (size_t)b_recvd;
 
-		if (b_total == moe->result->size) {
-			Memory *new = resize_memory(&(moe->result),
-						moe->result->size + (size_t)b_recvd);
+		if (b_total == moe->memory->size) {
+			Memory *new = resize_memory(&(moe->memory),
+						moe->memory->size + (size_t)b_recvd);
 
 			if (new == NULL) {
 				perror("response_handler(): realloc");
-				return -1;
+				goto err;
 			}
 
-			moe->result = new;
+			moe->memory = new;
 		}
 
 	} while (b_recvd > 0);
 
-	moe->result->val[b_total] = '\0';
+	moe->memory->val[b_total] = '\0';
 
-	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
+	moe->result = moe->memory->val;
+
+	if ((p = strstr(moe->result, "\r\n")) == NULL)
 		goto err;
 
 	h_end = p +2u;
 
 	/* Check http response status */
-	if ((p = strstr(moe->result->val, "200")) == NULL)
+	if ((p = strstr(moe->result, "200")) == NULL)
 		goto err;
 
 	/* Skipping \r\n\r\n */
@@ -437,10 +439,9 @@ response_handler(MoeTr *moe)
 
 
 	/* Got the results */
-	moe->result->val = p +2u;
+	moe->result = p +2u;
 
-
-	if ((p = strstr(moe->result->val, "\r\n")) == NULL)
+	if ((p = strstr(moe->result, "\r\n")) == NULL)
 		goto err;
 
 	*p = '\0';
@@ -458,13 +459,12 @@ resize_memory(Memory **mem, size_t size)
 {
 	Memory *new_mem;
 
-	new_mem = realloc((*mem), sizeof(Memory) + (*mem)->size + size);
+	new_mem = realloc((*mem), sizeof(Memory) + size);
 	if (new_mem == NULL)
 		return NULL;
 
-	new_mem->val   = (char *)new_mem + sizeof(Memory);
-	new_mem->size += size;
-	(*mem)         = new_mem;
+	new_mem->size = size;
+	(*mem)        = new_mem;
 
 	return *mem;
 }
@@ -644,16 +644,16 @@ err:
 static int
 raw(MoeTr *moe)
 {
-	return puts(moe->result->val);
+	return puts(moe->result);
 }
 
 
-static int
+static inline int
 parse(MoeTr *moe)
 {
 	cJSON *json;
 
-	if ((json = cJSON_Parse(moe->result->val)) == NULL)
+	if ((json = cJSON_Parse(moe->result)) == NULL)
 		return -1;
 
 	parse_func[moe->result_type](moe, json);
@@ -916,7 +916,7 @@ parse_detect_lang(MoeTr *moe, cJSON *json)
 }
 
 
-static void
+static inline void
 help(void)
 {
 	printf("moetranslate - A simple language translator\n\n"
@@ -938,7 +938,7 @@ help(void)
 }
 
 
-static void
+static inline void
 help_intrc(const MoeTr *moe)
 {
 	printf("------------------------\n"
@@ -973,7 +973,7 @@ help_intrc(const MoeTr *moe)
 }
 
 
-static void
+static inline void
 info_intrc(const MoeTr *moe)
 {
 	printf(BOLD_WHITE("----[ Moetranslate ]----")
