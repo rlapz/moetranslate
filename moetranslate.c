@@ -153,30 +153,42 @@ die(const char *msg)
 static void
 load_config_h(MoeTr *moe)
 {
+	const char *err_msg;
+
+
 	if (default_output_mode < PARSE || default_output_mode > RAW) {
-		errno = EINVAL;
-		die("setup(): config.h: default_output_mode");
+		err_msg = "setup(): config.h: default_output_mode";
+		goto err;
 	}
 
 	if (default_result_type < BRIEF || default_result_type > DET_LANG ) {
-		errno = EINVAL;
-		die("setup(): config.h: default_result_type");
+		err_msg = "setup(): config.h: default_result_type";
+		goto err;
 	}
 
-	if ((moe->lang_src = get_lang(default_lang_src)) == NULL)
-		die("setup(): config.h: default_lang_src");
+	if ((moe->lang_src = get_lang(default_lang_src)) == NULL) {
+		err_msg = "setup(): config.h: default_lang_src";
+		goto err;
+	}
 
 	if (strcmp(default_lang_trg, "auto") == 0) {
-		errno = EINVAL;
-		die("setup(): config.h: default_lang_trg cannot be \"auto\"");
+		err_msg = "setup(): config.h: default_lang_trg cannot be \"auto\"";
+		goto err;
 	}
 
-	if ((moe->lang_trg = get_lang(default_lang_trg)) == NULL)
-		die("setup(): config.h: default_lang_src");
-
+	if ((moe->lang_trg = get_lang(default_lang_trg)) == NULL) {
+		err_msg = "setup(): config.h: default_lang_src";
+		goto err;
+	}
 
 	moe->output_mode = default_output_mode;
 	moe->result_type = default_result_type;
+
+	return;
+
+err:
+	errno = EINVAL;
+	die(err_msg);
 }
 
 
@@ -206,12 +218,15 @@ cleanup(MoeTr *moe)
 static inline const Lang *
 get_lang(const char *code)
 {
-	for (size_t i = LENGTH(lang); i > 0; i--) {
-		if (strcasecmp(code, lang[i -1u].code) == 0)
-			return &lang[i -1u];
-	}
+	size_t i = LENGTH(lang);
 
-	errno = EINVAL;
+
+	do {
+		i--;
+		if (strcasecmp(code, lang[i].code) == 0)
+			return &lang[i];
+	} while (i > 0);
+
 	return NULL;
 }
 
@@ -241,7 +256,7 @@ set_lang(MoeTr      *moe,
 	if (*src != '\0' && strcmp(src, moe->lang_src->code) != 0) {
 		if ((l_src = get_lang(src)) == NULL) {
 			fprintf(stderr, "Unknown \"%s\" language code\n", src);
-			return -1;
+			goto err0;
 		}
 
 		moe->lang_src = l_src;
@@ -255,7 +270,7 @@ set_lang(MoeTr      *moe,
 
 		if ((l_trg = get_lang(trg)) == NULL) {
 			fprintf(stderr, "Unknown \"%s\" language code\n", trg);
-			return -1;
+			goto err0;
 		}
 
 		moe->lang_trg = l_trg;
