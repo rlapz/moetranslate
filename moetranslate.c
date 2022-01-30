@@ -79,7 +79,6 @@ static int         set_lang         (MoeTr *moe, const char *codes);
 static int         inet_connect     (MoeTr *moe);
 static int         request_handler  (MoeTr *moe);
 static int         response_handler (MoeTr *moe);
-static Memory     *resize_memory    (Memory **mem, size_t size);
 static int         run              (MoeTr *moe);
 static int         run_intrc        (MoeTr *moe); // Interactive input
 static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
@@ -419,15 +418,17 @@ response_handler(MoeTr *moe)
 		b_total += (size_t)b_recvd;
 
 		if (b_total == moe->memory->size) {
-			Memory *new = resize_memory(&(moe->memory),
-						moe->memory->size + (size_t)b_recvd);
+			const size_t new_size = moe->memory->size + b_recvd;
+			Memory *new_mem = realloc(moe->memory,
+						  sizeof(Memory) + new_size);
 
-			if (new == NULL) {
+			if (new_mem == NULL) {
 				perror("response_handler(): realloc");
 				goto err;
 			}
 
-			moe->memory = new;
+			new_mem->size = new_size;
+			moe->memory   = new_mem;
 		}
 
 	} while (b_recvd > 0);
@@ -466,22 +467,6 @@ response_handler(MoeTr *moe)
 err:
 	fprintf(stderr, "response_handler(): Failed to get the contents.\n");
 	return -1;
-}
-
-
-static Memory *
-resize_memory(Memory **mem, size_t size)
-{
-	Memory *new_mem;
-
-	new_mem = realloc((*mem), sizeof(Memory) + size);
-	if (new_mem == NULL)
-		return NULL;
-
-	new_mem->size = size;
-	(*mem)        = new_mem;
-
-	return *mem;
 }
 
 
