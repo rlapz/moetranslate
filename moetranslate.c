@@ -33,7 +33,7 @@ typedef enum {
 	MISS   ,
 	QUIT   ,
 	ERR    ,
-} Intrc_cmd;
+} IntrcCmd;
 
 typedef enum  {
 	BRIEF = 1,
@@ -81,7 +81,7 @@ static int         request_handler  (MoeTr *moe);
 static int         response_handler (MoeTr *moe);
 static int         run              (MoeTr *moe);
 static int         run_intrc        (MoeTr *moe); // Interactive input
-static Intrc_cmd   intrc_parse_cmd  (MoeTr *moe, const char *cmd);
+static IntrcCmd    intrc_parse_cmd  (MoeTr *moe, const char *cmd);
 static int         raw              (MoeTr *moe);
 static int         parse            (MoeTr *moe);
 static void        parse_brief      (MoeTr *moe, cJSON *json);
@@ -497,9 +497,9 @@ cleanup:
 static int
 run_intrc(MoeTr *moe)
 {
-	Intrc_cmd prs;
-	int       ret;
-	char     *input, *tmp;
+	IntrcCmd prs;
+	int      ret;
+	char    *input, *tmp;
 
 	info_intrc(moe);
 	SET_LANG_PROMPT(moe->lang_src->code, moe->lang_trg->code);
@@ -553,7 +553,7 @@ ret1:
 }
 
 
-static Intrc_cmd
+static IntrcCmd
 intrc_parse_cmd(MoeTr *moe,
 		const char *cmd)
 {
