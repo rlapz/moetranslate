@@ -918,9 +918,9 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 
 		/* verbs, nouns, etc. */
 		str = json_value_as_string(__json_array_index(arr, 0)->value);
-		if (str == NULL) {
+		if (str->string_size == 0) {
 			/* no label */
-			printf("\n" COLOR_BOLD_BLUE("[+]"));
+			printf("\n" COLOR_BOLD_BLUE("[?]"));
 		} else {
 			printf("\n" COLOR_BOLD_BLUE("[%c%.*s]"), toupper(str->string[0]),
 			       (int)str->string_size - 1, &str->string[1]);
@@ -992,9 +992,9 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 
 		/* verbs, nouns, etc. */
 		str = json_value_as_string(__json_array_index(arr, 0)->value);
-		if (str == NULL) {
+		if (str->string_size == 0) {
 			/* no label */
-			printf("\n" COLOR_BOLD_YELLOW("[+]"));
+			printf("\n" COLOR_BOLD_YELLOW("[?]"));
 		} else {
 			printf("\n" COLOR_BOLD_YELLOW("[%c%.*s]"), toupper(str->string[0]),
 			       (int)str->string_size - 1, &str->string[1]);
@@ -1157,14 +1157,12 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 	/* source: language */
 	if ((src_lang_s != NULL) && (strcasecmp("auto", m->langs[0]->key) == 0)) {
 		const Lang *lang = NULL;
-		const char *lang_key = "unknown";
-		const char *lang_val = "unknown";
-		if (lang_get_from_key_s(src_lang_s->string, src_lang_s->string_size, &lang) == 0) {
-			lang_key = lang->key;
+		const char *lang_val = "Unknown";
+		if (lang_get_from_key_s(src_lang_s->string, src_lang_s->string_size, &lang) == 0)
 			lang_val = lang->value;
-		}
 
-		printf(COLOR_BOLD_GREEN("[%s]:") COLOR_BOLD_WHITE(" %s") "\n", lang_key, lang_val);
+		printf(COLOR_BOLD_GREEN("[%.*s]:") COLOR_BOLD_WHITE(" %s") "\n",
+		       (int)src_lang_s->string_size, src_lang_s->string, lang_val);
 	}
 	printf("\n------------------------\n");
 
@@ -1195,11 +1193,6 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size,
 		       trg_splls_s->string);
 	}
-
-
-	/* target: language */
-	//printf(COLOR_BOLD_GREEN("[%s]:") COLOR_BOLD_WHITE(" %s") "\n", m->langs[1]->key,
-	//       m->langs[1]->value);
 
 
 	/* synonyms */
@@ -1239,7 +1232,7 @@ __moetr_print_detect_lang(json_value_t *json)
 		return;
 
 	const Lang *lang = NULL;
-	const char *lang_val = "unknown";
+	const char *lang_val = "Unknown";
 	if (lang_get_from_key_s(str->string, str->string_size, &lang) == 0)
 		lang_val = lang->value;
 
@@ -1250,8 +1243,8 @@ __moetr_print_detect_lang(json_value_t *json)
 static int
 moetr_translate(MoeTr *m, const char text[])
 {
-	const char *src = m->langs[0]->key;
-	const char *trg = m->langs[1]->key;
+	const char *const src = m->langs[0]->key;
+	const char *const trg = m->langs[1]->key;
 	if (http_request(&m->http, m->result_type, src, trg, trg, text) < 0)
 		return -1;
 
@@ -1491,7 +1484,6 @@ int
 main(int argc, char *argv[])
 {
 	int ret = EXIT_FAILURE;
-	int opt;
 	int lang_list_max_col = 0;
 	int is_interactive = 0;
 	int is_detect_lang = 0;
@@ -1505,6 +1497,7 @@ main(int argc, char *argv[])
 	if (moetr_init(&moe, result_type, langs) < 0)
 		return ret;
 
+	int opt;
 	while ((opt = getopt(argc, argv, "s:d:l:iLh")) != -1) {
 		switch (opt) {
 		case 's':
