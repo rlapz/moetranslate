@@ -2,22 +2,21 @@
 #
 # moetranslate - Simple language translator written in C
 #
-# Copyright (c) 2021 Arthur Lapz (rLapz)
+# Copyright (c) 2024 Arthur Lapz (rLapz)
 #
 # See LICENSE file for license details
 
 TARGET    = moetranslate
-VERSION   = 0.3.0
+VERSION   = 0.9.0
 
 PREFIX    = /usr
 CC        = cc
-CFLAGS    = -std=c99 -Wall -Wextra -pedantic -fpie -fPIE -fno-omit-frame-pointer \
-	    -D_POSIX_C_SOURCE=200809L -O3
+CFLAGS    = -std=c99 -Wall -Wextra -pedantic -D_POSIX_C_SOURCE=200809L -O3
 
-SRC       = moetranslate.c lib/cJSON.c lib/util.c
+SRC       = moetranslate.c
 OBJ       = $(SRC:.c=.o)
 
-FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h lib/
+FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h json.h
 # ------------------------------------------------------------------- #
 
 all: options $(TARGET)
@@ -31,17 +30,9 @@ moetranslate.o: $(TARGET).c
 	@printf "\n%s\n" "Compiling: $(<)..."
 	$(CC) $(CFLAGS) -c -o $(@) $(<)
 
-cJSON.o: cJSON.c cJSON.h
-	@printf "\n%s\n" "Compiling: $(<)..."
-	$(CC) $(CFLAGS) -c -o $(@) $(<)
-
-util.o: util.c util.h
-	@printf "\n%s\n" "Compiling: $(<)..."
-	$(CC) $(CFLAGS) -c -o $(@) $(<)
-
 $(TARGET): $(OBJ)
 	@printf "\n%s\n" "Linking: $(^)..."
-	$(CC) -o $(@) $(^) -ledit
+	$(CC) -o $(@) $(^) -lreadline
 # ------------------------------------------------------------------- #
 
 options:

@@ -10,7 +10,7 @@ A simple language translator written in C
 ## Required Package(s):
 
 ```
-libedit (https://thrysoee.dk/editline/)
+readline
 ```
 
 ## How to Install:
@@ -28,25 +28,25 @@ make uninstall
 ## How to Use:
 
 ```
-moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
+moetranslate -[s/d/l/i/L/h] [[SOURCE]:[TARGET]] [TEXT]
 
--b = Brief output (only show simple output).
--f = Full/detail output.
--r = Raw output (json).
--i = Interactive input mode.
--d = Detect language.
--h = Show help message.
+-s = Simple output
+-d = Detail output
+-l = Detect language
+-L = Language list
+-i = Interactive input mode
+-h = Show help message
 ```
 
 
-1. Brief output:
-	`moetranslate -b auto:id "Hello world\!"`
+1. Simple output:
+	`moetranslate -s auto:id "Hello world\!"`
 
-	`auto` -> automatic detection
+	`auto` -> automatic language
 
 	`id`   -> Indonesian language code
-2. Full/detail output:
-	`moetranslate -f en:id "Hello wrld\!"`
+2. Detail output:
+	`moetranslate -d en:id "Hello wrld\!"`
 
 	`en`   -> English language code
 
@@ -54,8 +54,8 @@ moetranslate [-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]
 3. Interactive input mode:
 	```
 	moetranslate -i
-	moetranslate -i -b auto:en
-	moetranslate -if auto:en
+	moetranslate -i -s auto:en
+	moetranslate -id auto:en
 	```
 4. Show help:
 	`moetranslate -h`

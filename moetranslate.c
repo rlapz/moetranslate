@@ -1,6 +1,6 @@
 /* MIT License
  *
- * Copyright (c) 2021 Arthur Lapz (rLapz)
+ * Copyright (c) 2024 Arthur Lapz (rLapz)
  *
  * See LICENSE file for license details
  */
@@ -17,301 +17,499 @@
 #include <unistd.h>
 
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/socket.h>
 #include <netdb.h>
 
-#include <editline/readline.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
-#include "lib/cJSON.h"
-#include "lib/util.h"
-
-
-
-/* Command's results in interactive input mode */
-typedef enum {
-	OK  = 1,
-	MISS   ,
-	QUIT   ,
-	ERR    ,
-} IntrcCmd;
-
-typedef enum  {
-	BRIEF = 1,
-	DETAIL   ,
-	DET_LANG ,
-} ResultType;
-
-typedef enum {
-	PARSE = 1,
-	RAW      ,
-} OutputMode;
-
-typedef struct {
-	size_t size ;
-	char   val[];
-} Memory;
-
-typedef struct {
-	const char *const code ;
-	const char *const value;
-} Lang;
-
-typedef struct MoeTr {
-	bool        is_connected;
-	ResultType  result_type ;
-	OutputMode  output_mode ;
-	int         sock_d      ;
-	const char *text        ;
-	const Lang *lang_src    ;
-	const Lang *lang_trg    ;
-	Memory     *memory      ;
-	char       *result      ;
-} MoeTr;
-
-
-/* function declarations */
-static void        die              (const char *msg);
-static void        load_config_h    (MoeTr *moe);
-static void        setup            (MoeTr *moe);
-static void        cleanup          (MoeTr *moe);
-static const Lang *get_lang         (const char *code);
-static int         set_lang         (MoeTr *moe, const char *codes);
-static int         inet_connect     (MoeTr *moe);
-static int         request_handler  (MoeTr *moe);
-static int         response_handler (MoeTr *moe);
-static int         run              (MoeTr *moe);
-static int         run_intrc        (MoeTr *moe); // Interactive input
-static IntrcCmd    intrc_parse_cmd  (MoeTr *moe, const char *cmd);
-static int         raw              (MoeTr *moe);
-static int         parse            (MoeTr *moe);
-static void        parse_brief      (MoeTr *moe, cJSON *json);
-static void        parse_detail     (MoeTr *moe, cJSON *json);
-static void        parse_detect_lang(MoeTr *moe, cJSON *json);
-static void        help             (void);
-static void        help_intrc       (const MoeTr *moe);
-static void        info_intrc       (const MoeTr *moe);
-
-
-/* config.h for applying patches and the configurations */
+#include "json.h"
 #include "config.h"
 
 
-/* color functions */
-#define REGULAR_GREEN(TEXT)  "\033[00;" GREEN_COLOR  "m" TEXT "\033[00m"
-#define REGULAR_YELLOW(TEXT) "\033[00;" YELLOW_COLOR "m" TEXT "\033[00m"
 
-#define BOLD_BLUE(TEXT)      "\033[01;" BLUE_COLOR   "m" TEXT "\033[00m"
-#define BOLD_GREEN(TEXT)     "\033[01;" GREEN_COLOR  "m" TEXT "\033[00m"
-#define BOLD_WHITE(TEXT)     "\033[01;" WHITE_COLOR  "m" TEXT "\033[00m"
-#define BOLD_YELLOW(TEXT)    "\033[01;" YELLOW_COLOR "m" TEXT "\033[00m"
+#define LEN(X) ((sizeof(X)) / (sizeof(*X)))
 
 
-/* global variables */
-static char prompt_intrc[16u + sizeof(PROMPT_LABEL)];
+#if (CONFIG_COLOR_ENABLED != 0)
+	#define COLOR_REGULAR_GREEN(X)  "\033[00;" CONFIG_COLOR_GREEN  "m" X "\033[00m"
+	#define COLOR_REGULAR_YELLOW(X) "\033[00;" CONFIG_COLOR_YELLOW "m" X "\033[00m"
+	
+	#define COLOR_BOLD_BLUE(X)      "\033[01;" CONFIG_COLOR_BLUE   "m" X "\033[00m"
+	#define COLOR_BOLD_GREEN(X)     "\033[01;" CONFIG_COLOR_GREEN  "m" X "\033[00m"
+	#define COLOR_BOLD_WHITE(X)     "\033[01;" CONFIG_COLOR_WHITE  "m" X "\033[00m"
+	#define COLOR_BOLD_YELLOW(X)    "\033[01;" CONFIG_COLOR_YELLOW "m" X "\033[00m"
+#else
+	#define COLOR_REGULAR_GREEN(X)  X
+	#define COLOR_REGULAR_YELLOW(X) X
+	
+	#define COLOR_BOLD_BLUE(X)      X
+	#define COLOR_BOLD_GREEN(X)     X
+	#define COLOR_BOLD_WHITE(X)     X
+	#define COLOR_BOLD_YELLOW(X)    X
+#endif
 
-static const char *const result_type_str[] = {
-	[BRIEF]    = "Brief",
-	[DETAIL]   = "Detail",
-	[DET_LANG] = "Detect Language"
+
+/*
+ * cstr
+ */
+static size_t      cstr_trim_right(const char cstr[], size_t len);
+static const char *cstr_trim_left(const char cstr[], size_t *len);
+static char       *cstr_trim_right_mut(char cstr[]);
+static char       *cstr_trim_left_mut(char cstr[]);
+static const char *cstr_skip_html_tags(char raw[], size_t len);
+static char       *cstr_last_find(char cstr[], size_t len, int c);
+
+
+/*
+ * Buffer
+ */
+typedef struct {
+	char   *ptr;
+	size_t  size;
+} Buffer;
+
+static int   buffer_init(Buffer *b, size_t size);
+static void  buffer_deinit(Buffer *b);
+
+/* ret: -1 -> failed to realloc
+ *       0 -> no realloc
+ *       1 -> realloc
+ */
+static int   buffer_check(Buffer *s, size_t len);
+
+
+/*
+ * Lang
+ */
+typedef struct {
+	const char *key;
+	const char *value;
+} Lang;
+
+static const Lang lang_pack[] = CONFIG_LANG_PACK;
+
+static void        lang_show_list(int max_col);
+static const Lang *lang_get_from_key(const char key[]);
+static int         lang_get_from_key_s(const char key[], size_t len, const Lang **lang);
+
+/*
+ * keys: source & target pairs (source_key:target_key)
+ *       source / target can be empty:
+ *       example:
+ *           en:    -> source = en, but the target is empty
+ *             :id  -> target = id, but the source is empty
+ *             :    -> both empty
+ *
+ * return:  0 = sucess
+ *         -1 = invalid keys format
+ *         -2 = invalid source lang
+ *         -3 = invalid target lang
+ *         -4 = both are invalid
+ */
+static int         lang_parse(const Lang *l[2], const char keys[]);
+
+
+/*
+ * Net
+ */
+static int net_tcp_connect(const char host[], const char port[]);
+
+
+/*
+ * Http
+ */
+enum {
+	HTTP_IOV_METHOD = 0,
+	HTTP_IOV_PATH_BASE,
+	HTTP_IOV_PATH_SPEC,
+	HTTP_IOV_SRC_LANG_KEY,
+	HTTP_IOV_SRC_LANG_VAL,
+	HTTP_IOV_TRG_LANG_KEY,
+	HTTP_IOV_TRG_LANG_VAL,
+	HTTP_IOV_HL_LANG_KEY,
+	HTTP_IOV_HL_LANG_VAL,
+	HTTP_IOV_TEXT_KEY,
+	HTTP_IOV_TEXT_VAL,
+	HTTP_IOV_PROTOCOL,
+	HTTP_IOV_HEADER,
+
+	HTTP_IOVS_SIZE,
 };
 
-static const char *const output_mode_str[] = {
-	[PARSE] = "Parse",
-	[RAW]   = "Raw"
+typedef struct {
+	const char *host;
+	const char *port;
+
+	Buffer buffer;
+	size_t buffer_len;
+
+	struct iovec iovs[HTTP_IOVS_SIZE];
+} Http;
+
+static int   http_init(Http *h);
+static void  http_deinit(Http *h);
+static int   http_request(Http *h, int type, const char sl[], const char tl[],
+			  const char hl[], const char text[]);
+/* Don't free() the returned memory! */
+static char *http_response_get_json(Http *h, size_t *ret_len);
+
+
+/*
+ * MoeTr
+ */
+enum {
+	RESULT_TYPE_SIMPLE = 0,
+	RESULT_TYPE_DETAIL,
+	RESULT_TYPE_LANG,
 };
 
-/* function array */
-static int (*const run_func[])(MoeTr *) = {
-	[PARSE] = parse,
-	[RAW]   = raw
+const char result_type_str[][2][16] = {
+	[RESULT_TYPE_SIMPLE] = { "s", "Simple" },
+	[RESULT_TYPE_DETAIL] = { "d", "Detail" },
+	[RESULT_TYPE_LANG]   = { "l", "Detect Language" },
 };
 
-static void (*const parse_func[])(MoeTr *, cJSON *) = {
-	[BRIEF]    = parse_brief,
-	[DETAIL]   = parse_detail,
-	[DET_LANG] = parse_detect_lang
+enum {
+	MOETR_INTR_CODE_NOP = 0,
+	MOETR_INTR_CODE_TRANSLATE,
+	MOETR_INTR_CODE_CHANGE_LANGS,
+	MOETR_INTR_CODE_CHANGE_RESTYPE,
+	MOETR_INTR_CODE_LANG_LIST,
+	MOETR_INTR_CODE_HELP,
+	MOETR_INTR_CODE_QUIT,
+	MOETR_INTR_CODE_ERROR,
 };
 
+typedef struct {
+	int         result_type;
+	const Lang *langs[2];
+	char        prompt[64];
+	Http        http;
+} MoeTr;
 
-#define SET_LANG_PROMPT(SRC, TRG)\
-	snprintf(prompt_intrc, sizeof(prompt_intrc), \
-		"[ %s:%s ]%s", SRC, TRG, PROMPT_LABEL  \
-	)
+static int  moetr_init(MoeTr *m, char default_result_type, const Lang *default_langs[2]);
+static void moetr_deinit(MoeTr *m);
+static int  moetr_set_langs(MoeTr *m, const char keys[]);
+static int  moetr_set_result_type(MoeTr *m, char type);
+static int  moetr_translate(MoeTr *m, const char text[]);
+static void moetr_interactive(MoeTr *m, const char text[]);
 
 
-
-/* function implementations */
-static inline void
-die(const char *msg)
+/********************************************************************************
+ *                                    IMPL                                      *
+ ********************************************************************************/
+/*
+ * cstr
+ */
+static size_t
+cstr_trim_right(const char cstr[], size_t len)
 {
-	perror(msg);
-	exit(EXIT_FAILURE);
+	if ((len == 0) || ((len == 1) && (isspace(cstr[0]))))
+		return 0;
+
+	const char *p = cstr + (len - 1);
+	while ((*p != '\0') && (p > cstr) && (isspace(*p)))
+		p--;
+
+	return (p - cstr) + 1;
+}
+
+
+static const char *
+cstr_trim_left(const char cstr[], size_t *len)
+{
+	const size_t _len = *len;
+	if (_len == 0)
+		return cstr;
+
+	size_t i = 0;
+	while ((cstr[i] != '\0') && (isspace(cstr[i])))
+		i++;
+
+	*len = (_len - i);
+	return &cstr[i];
+}
+
+
+static char *
+cstr_trim_right_mut(char cstr[])
+{
+	size_t len = strlen(cstr);
+	if (len == 0)
+		return cstr;
+
+	char *end = cstr + (len - 1);
+	while ((*end != '\0') && (end > cstr) && (isspace(*cstr)))
+		end--;
+
+	*(end + 1) = '\0';
+	return cstr;
+}
+
+
+static char *
+cstr_trim_left_mut(char cstr[])
+{
+	char *start = cstr;
+	while ((*start != '\0') && (isspace(*start)))
+		start++;
+
+	return start;
+}
+
+
+static const char *
+cstr_skip_html_tags(char raw[], size_t len)
+{
+	const struct {
+		const char *const tags[2];
+		size_t            len[2];
+
+	} tag_list[] = {
+		{ .tags = { "<b>", "</b>" }, .len = { 3, 4 } },
+		{ .tags = { "<i>", "</i>" }, .len = { 3, 4 } },
+
+		/* We don't really need these (probably):
+		{ .tags = { "<u>", "</u>" }, .len = { 3, 4 } },
+		{ .tags = { "<br>", ""    }, .len = { 4, 0 } },
+		*/
+	};
+
+
+	const char *end = raw + (len - 1u);
+	for (size_t i = 0; i < len;) {
+		char *tag_close = NULL;
+		for (size_t hi = 0; hi < LEN(tag_list); hi++) {
+			char *tag_open = strstr(raw + i, tag_list[hi].tags[0]);
+			if (tag_open == NULL)
+				continue;
+
+			tag_close = strstr(tag_open, tag_list[hi].tags[1]);
+			if (tag_close == NULL)
+				continue;
+
+			memmove(tag_open, tag_open + tag_list[hi].len[0], end - tag_open);
+			tag_close -= tag_list[hi].len[0];
+			memmove(tag_close, tag_close + tag_list[hi].len[1], end - tag_close);
+		}
+
+		i += (end - tag_close);
+	}
+
+	return raw;
+}
+
+
+static char *
+cstr_last_find(char cstr[], size_t len, int c)
+{
+	if (len == 0)
+		return cstr;
+
+	char *p = cstr + (len - 1);
+	while (*p && (p > cstr)) {
+		if (*p == c)
+			return p;
+
+		p--;
+	}
+	
+	return NULL;
+}
+
+
+/*
+ * Buffer
+ */
+static int
+buffer_init(Buffer *b, size_t size)
+{
+	if (size >= CONFIG_BUFFER_MAX_SIZE) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	char *const buffer = malloc(size);
+	if (buffer == NULL)
+		return -1;
+
+	b->ptr = buffer;
+	b->size = size;
+	return 0;
 }
 
 
 static void
-load_config_h(MoeTr *moe)
+buffer_deinit(Buffer *s)
 {
-	const char *err_msg;
-
-
-	if (default_output_mode < PARSE || default_output_mode > RAW) {
-		err_msg = "setup(): config.h: default_output_mode";
-		goto err;
-	}
-
-	if (default_result_type < BRIEF || default_result_type > DET_LANG ) {
-		err_msg = "setup(): config.h: default_result_type";
-		goto err;
-	}
-
-	if ((moe->lang_src = get_lang(default_lang_src)) == NULL) {
-		err_msg = "setup(): config.h: default_lang_src";
-		goto err;
-	}
-
-	if (strcmp(default_lang_trg, "auto") == 0) {
-		err_msg = "setup(): config.h: default_lang_trg cannot be \"auto\"";
-		goto err;
-	}
-
-	if ((moe->lang_trg = get_lang(default_lang_trg)) == NULL) {
-		err_msg = "setup(): config.h: default_lang_src";
-		goto err;
-	}
-
-	moe->output_mode = default_output_mode;
-	moe->result_type = default_result_type;
-
-	return;
-
-err:
-	errno = EINVAL;
-	die(err_msg);
+	free(s->ptr);
 }
 
 
+static int
+buffer_check(Buffer *b, size_t len)
+{
+	if (len < b->size)
+		return 0;
+
+	const size_t new_size = b->size + len;
+	if (new_size >= CONFIG_BUFFER_MAX_SIZE) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	char *const new_buffer = realloc(b->ptr, new_size);
+	if (new_buffer == NULL)
+		return -1;
+
+	b->ptr = new_buffer;
+	b->size = new_size;
+	return 1;
+}
+
+
+/*
+ * Lang
+ */
 static void
-setup(MoeTr *moe)
+lang_show_list(int max_col)
 {
-	moe->memory = calloc(1u, sizeof(Memory) + BUFFER_SIZE);
-	if (moe->memory == NULL)
-		die("setup(): malloc");
+	const int lang_pack_len = (int)LEN(lang_pack);
+	if (max_col == 0)
+		max_col = 2;
 
-	moe->memory->size = BUFFER_SIZE;
-	moe->is_connected = false;
+	if (max_col > lang_pack_len)
+		max_col = lang_pack_len;
+
+	int col = 0;
+	const int max_key_len = 6;
+	const int max_val_len = 20;
+	for (int i = 0; i < lang_pack_len; i++) {
+		const char *const key = lang_pack[i].key;
+		const char *const val = lang_pack[i].value;
+		const int key_len = max_key_len - ((int)strlen(key));
+		const int val_len = max_val_len - ((int)strlen(val));
+
+		printf(COLOR_REGULAR_GREEN("[%s]")"%*s%s%*s", key, key_len, "", val, val_len, "");
+
+		col++;
+		if (col == max_col) {
+			col = 0;
+			putchar('\n');
+		}
+	}
+
+	if (col != 0)
+		putchar('\n');
 }
 
 
-static void
-cleanup(MoeTr *moe)
+static const Lang *
+lang_get_from_key(const char key[])
 {
-	if (moe->memory != NULL)
-		free(moe->memory);
-
-	if (moe->is_connected)
-		close(moe->sock_d);
-}
-
-
-static inline const Lang *
-get_lang(const char *code)
-{
-	size_t i = LENGTH(lang);
-
-
-	do {
-		i--;
-		if (strcasecmp(code, lang[i].code) == 0)
-			return &lang[i];
-	} while (i > 0);
+	for (size_t i = 0; i < LEN(lang_pack); i++) {
+		if (strcasecmp(lang_pack[i].key, key) == 0)
+			return &lang_pack[i];
+	}
 
 	return NULL;
 }
 
 
 static int
-set_lang(MoeTr      *moe,
-	 const char *codes)
+lang_get_from_key_s(const char key[], size_t len, const Lang **lang)
 {
-	char        tmp[16];
-	char       *src, *trg;
-	const Lang *l_src, *l_trg;
-	size_t      len = strlen(codes);
+	char buffer[CONFIG_LANG_KEY_SIZE + 1u];
+	if (len == 0)
+		return 0;
 
+	if (len <= sizeof(buffer)) {
+		memcpy(buffer, key, len);
+		buffer[len] = '\0';
 
-	if (len >= sizeof(tmp))
-		goto err0;
-
-	memcpy(tmp, codes, len +1u);
-	src = cskip_a(tmp);
-
-	if ((trg = strchr(src, ':')) == NULL)
-		goto err0;
-
-	*(trg++) = '\0';
-
-
-	if (*src != '\0' && strcmp(src, moe->lang_src->code) != 0) {
-		if ((l_src = get_lang(src)) == NULL) {
-			fprintf(stderr, "Unknown \"%s\" language code\n", src);
-			goto err0;
+		const Lang *const ret_lang = lang_get_from_key(buffer);
+		if (ret_lang != NULL) {
+			*lang = ret_lang;
+			return 0;
 		}
-
-		moe->lang_src = l_src;
 	}
 
-	if (*trg != '\0' && strcmp(trg, moe->lang_trg->code) != 0) {
-		if (strcmp(trg, "auto") == 0) {
-			fprintf(stderr, "Target language cannot be \"auto\"\n");
-			goto err0;
-		}
-
-		if ((l_trg = get_lang(trg)) == NULL) {
-			fprintf(stderr, "Unknown \"%s\" language code\n", trg);
-			goto err0;
-		}
-
-		moe->lang_trg = l_trg;
-	}
-
-	return 0;
-
-err0:
-	errno = EINVAL;
 	return -1;
 }
 
 
 static int
-inet_connect(MoeTr *moe)
+lang_parse(const Lang *l[2], const char keys[])
+{
+	int ret = 0;
+	const char *key;
+	size_t key_len;
+
+
+	const char *const sep = strchr(keys, ':');
+	if (sep == NULL) {
+		ret = -1;
+		goto out0;
+	}
+
+
+	/* source */
+	key_len = cstr_trim_right(keys, (sep - keys));
+	key = cstr_trim_left(keys, &key_len);
+	if (lang_get_from_key_s(key, key_len, &l[0]) < 0)
+		ret -= 2;
+
+	/* target */
+	key = sep + 1;
+	key_len = cstr_trim_right(key, strlen(key));
+	key = cstr_trim_left(key, &key_len);
+	if (key_len == 0)
+		goto out0;
+
+	if ((strncasecmp(key, "auto", key_len) == 0) || (lang_get_from_key_s(key, key_len, &l[1])) < 0)
+		ret -= 3;
+
+out0:
+	if (ret == -5)
+		ret = -4;
+
+	return ret;
+}
+
+
+/*
+ * Net
+ */
+static int
+net_tcp_connect(const char host[], const char port[])
 {
 	int fd, ret;
+	struct addrinfo *ai, *p = NULL;
 	struct addrinfo hints = {
 		.ai_family   = AF_UNSPEC,
 		.ai_socktype = SOCK_STREAM,
 	};
-	struct addrinfo *ai, *p = NULL;
 
 
-	if ((ret = getaddrinfo(URL, PORT, &hints, &ai)) != 0) {
-		fprintf(stderr, "inet_connect(): getaddrinfo: %s\n",
-			gai_strerror(ret)
-		);
-
+	ret = getaddrinfo(host, port, &hints, &ai);
+	if (ret != 0) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("net_tcp_connect: getaddrinfo: %s") "\n",
+			gai_strerror(ret));
 		return -1;
 	}
 
 	for (p = ai; p != NULL; p = p->ai_next) {
 		fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 		if (fd < 0) {
-			perror("inet_connect(): socket");
+			perror(COLOR_REGULAR_YELLOW("net_tcp_connect: socket"));
 			continue;
 		}
 
 		if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
-			perror("inet_connect(): connect");
-			fprintf(stderr, "Retrying...\n");
+			perror(COLOR_REGULAR_YELLOW("net_tcp_connect: connect"));
+
 			close(fd);
 			continue;
 		}
@@ -320,359 +518,383 @@ inet_connect(MoeTr *moe)
 	}
 
 	freeaddrinfo(ai);
-
 	if (p == NULL) {
-		fprintf(stderr, "inet_connect(): Failed to connect\n");
+		fprintf(stderr, COLOR_REGULAR_YELLOW("net_tcp_connect: failed to connect\n"));
 		return -1;
 	}
-
-	moe->is_connected = true;
-	moe->sock_d       = fd;
 
 	return fd;
 }
 
 
+/*
+ * Http
+ */
 static int
-request_handler(MoeTr *moe)
+http_init(Http *h)
 {
-#define TEXT_ENC_LEN   (TEXT_MAX_LEN * 3)
-#define BUFFER_REQ_LEN (sizeof(HTTP_REQUEST_DETAIL) + TEXT_ENC_LEN)
-
-	int     ret = 0;
-	char    enc_text[TEXT_ENC_LEN];
-	char    req_buff[BUFFER_REQ_LEN];
-
-	size_t  req_len;
-	size_t  b_total;
-	ssize_t b_sent;
-
-
-	url_encode(enc_text, moe->text, 0);
-
-	switch (moe->result_type) {
-	case BRIEF:
-		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_BRIEF,
-				moe->lang_src->code,
-				moe->lang_trg->code,
-				enc_text);
-		break;
-
-	case DETAIL:
-		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DETAIL,
-				moe->lang_src->code,
-				moe->lang_trg->code,
-				moe->lang_trg->code,
-				enc_text);
-		break;
-
-	case DET_LANG:
-		ret = snprintf(req_buff, BUFFER_REQ_LEN, HTTP_REQUEST_DET_LANG,
-				enc_text);
-		break;
-
-	default:
-		errno = EINVAL;
+	if (buffer_init(&h->buffer, CONFIG_BUFFER_SIZE * 3) < 0) {
+		perror(COLOR_REGULAR_YELLOW("http_init: str_init"));
 		return -1;
 	}
 
-	if (ret < 0) {
-		perror("request_handler(): snprintf");
-		return -1;
-	}
+	h->buffer_len = 0;
 
-	req_len = (size_t)ret;
-	b_total = 0;
-	while (b_total < req_len) {
-		if ((b_sent = send(moe->sock_d, &req_buff[b_total],
-				   req_len - b_total, 0)) < 0) {
-			perror("request_handler(): send");
-			return -1;
-		}
+	h->host = CONFIG_HTTP_HOST;
+	h->port = CONFIG_HTTP_PORT;
 
-		if (b_sent == 0)
-			break;
-
-		b_total += (size_t)b_sent;
-	}
-
+	h->iovs[HTTP_IOV_METHOD].iov_base    = CONFIG_HTTP_METHOD;
+	h->iovs[HTTP_IOV_METHOD].iov_len     = sizeof(CONFIG_HTTP_METHOD) - 1;
+	h->iovs[HTTP_IOV_PATH_BASE].iov_base = CONFIG_HTTP_PATH_BASE;
+	h->iovs[HTTP_IOV_PATH_BASE].iov_len  = sizeof(CONFIG_HTTP_PATH_BASE) - 1;
+	h->iovs[HTTP_IOV_PROTOCOL].iov_base  = CONFIG_HTTP_PROTOCOL;
+	h->iovs[HTTP_IOV_PROTOCOL].iov_len   = sizeof(CONFIG_HTTP_PROTOCOL) - 1;
+	h->iovs[HTTP_IOV_HEADER].iov_base    = CONFIG_HTTP_HEADER;
+	h->iovs[HTTP_IOV_HEADER].iov_len     = sizeof(CONFIG_HTTP_HEADER) - 1;
 	return 0;
 }
 
 
-static int
-response_handler(MoeTr *moe)
+static void
+http_deinit(Http *h)
 {
-	char    *p, *h_end;
-	size_t   b_total = 0;
-	ssize_t  b_recvd;
+	buffer_deinit(&h->buffer);
+}
 
 
-	do {
-		if ((b_recvd = recv(moe->sock_d, &moe->memory->val[b_total],
-				   moe->memory->size - b_total, 0)) < 0) {
-			perror("response_handler(): recv");
-			goto err;
+static const char *
+__http_url_encode(Http *h, const char plain[])
+{
+	const size_t plain_len = strlen(plain);
+	if (plain_len == 0)
+		return NULL;
+
+	if (buffer_check(&h->buffer, (plain_len * 3) + 1) < 0)
+		return NULL;
+
+	char *const buffer = h->buffer.ptr;
+	const size_t buffer_size = h->buffer.size;
+
+	const char *const hex  = "0123456789abcdef";
+	const unsigned char *p = (const unsigned char *)plain;
+
+	size_t i = 0, pos = 0;
+	while ((p[i] != '\0') && (i < buffer_size || pos < buffer_size) && (i < plain_len)) {
+		if (!isalnum(p[i])) {
+			buffer[pos++] = '%';
+			buffer[pos++] = hex[(p[i] >> 4u) & 15u];
+			buffer[pos++] = hex[p[i] & 15u];
+
+			i++;
+			continue;
 		}
 
-		b_total += (size_t)b_recvd;
+		buffer[pos++] = p[i++];
+	}
 
-		if (b_total == moe->memory->size) {
-			const size_t new_size = moe->memory->size + b_recvd;
-			Memory *new_mem = realloc(moe->memory,
-						  sizeof(Memory) + new_size);
+	h->buffer_len = pos;
+	buffer[pos] = '\0';
+	return buffer;
+}
 
-			if (new_mem == NULL) {
-				perror("response_handler(): realloc");
-				goto err;
-			}
 
-			new_mem->size = new_size;
-			moe->memory   = new_mem;
+static void
+__http_build_request(Http *h, int type, const char sl[], const char tl[], const char hl[],
+		     const char text[], size_t text_len)
+{
+	/* HEHE... :D */
+	/*
+	 * iovs[0]  = METHOD
+	 * iovs[1]  = path base
+	 * iovs[2]  = specific path
+	 * iovs[3]  = source lang key
+	 * iovs[4]  = source lang val
+	 * iovs[5]  = target lang key
+	 * iovs[6]  = target lang val
+	 * iovs[7]  = highlight lang key
+	 * iovs[8]  = highlight lang val
+	 * iovs[9]  = text key
+	 * iovs[10] = text val
+	 * iovs[11] = PROTOCOL
+	 * iovs[12] = header
+	 */
+
+	h->iovs[HTTP_IOV_PATH_SPEC].iov_len    = 0;
+	h->iovs[HTTP_IOV_SRC_LANG_KEY].iov_len = 0;
+	h->iovs[HTTP_IOV_SRC_LANG_VAL].iov_len = 0;
+	h->iovs[HTTP_IOV_TRG_LANG_KEY].iov_len = 0;
+	h->iovs[HTTP_IOV_TRG_LANG_VAL].iov_len = 0;
+	h->iovs[HTTP_IOV_HL_LANG_KEY].iov_len  = 0;
+	h->iovs[HTTP_IOV_HL_LANG_VAL].iov_len  = 0;
+
+
+	h->iovs[HTTP_IOV_TEXT_KEY].iov_base = CONFIG_HTTP_QUERY_TXT;
+	h->iovs[HTTP_IOV_TEXT_KEY].iov_len  = sizeof(CONFIG_HTTP_QUERY_TXT) - 1;
+	h->iovs[HTTP_IOV_TEXT_VAL].iov_base = (char *)text;
+	h->iovs[HTTP_IOV_TEXT_VAL].iov_len  = text_len;
+
+
+	switch (type) {
+	case RESULT_TYPE_LANG:
+		h->iovs[HTTP_IOV_PATH_SPEC].iov_base = CONFIG_HTTP_PATH_LANG;
+		h->iovs[HTTP_IOV_PATH_SPEC].iov_len  = sizeof(CONFIG_HTTP_PATH_LANG) - 1;
+		break;
+	case RESULT_TYPE_DETAIL:
+		h->iovs[HTTP_IOV_PATH_SPEC].iov_base = CONFIG_HTTP_PATH_DETAIL;
+		h->iovs[HTTP_IOV_PATH_SPEC].iov_len  = sizeof(CONFIG_HTTP_PATH_DETAIL) - 1;
+
+		h->iovs[HTTP_IOV_HL_LANG_KEY].iov_base = CONFIG_HTTP_QUERY_HL;
+		h->iovs[HTTP_IOV_HL_LANG_KEY].iov_len  = sizeof(CONFIG_HTTP_QUERY_HL) - 1;
+		h->iovs[HTTP_IOV_HL_LANG_VAL].iov_base = (char *)hl;
+		h->iovs[HTTP_IOV_HL_LANG_VAL].iov_len  = strlen(hl);
+
+		/* FALLTHROUGH */
+	case RESULT_TYPE_SIMPLE:
+		if (type == RESULT_TYPE_SIMPLE) {
+			h->iovs[HTTP_IOV_PATH_SPEC].iov_base = CONFIG_HTTP_PATH_SIMPLE;
+			h->iovs[HTTP_IOV_PATH_SPEC].iov_len  = sizeof(CONFIG_HTTP_PATH_SIMPLE) - 1;
 		}
 
-	} while (b_recvd > 0);
+		h->iovs[HTTP_IOV_SRC_LANG_KEY].iov_base = CONFIG_HTTP_QUERY_SL;
+		h->iovs[HTTP_IOV_SRC_LANG_KEY].iov_len  = sizeof(CONFIG_HTTP_QUERY_SL) - 1;
+		h->iovs[HTTP_IOV_SRC_LANG_VAL].iov_base = (char *)sl;
+		h->iovs[HTTP_IOV_SRC_LANG_VAL].iov_len  = strlen(sl);
 
-	moe->memory->val[b_total] = '\0';
-
-	moe->result = moe->memory->val;
-
-	if ((p = strstr(moe->result, "\r\n")) == NULL)
-		goto err;
-
-	h_end = p +2u;
-
-	/* Check http response status */
-	if ((p = strstr(moe->result, "200")) == NULL)
-		goto err;
-
-	/* Skipping \r\n\r\n */
-	if ((p = strstr(h_end, "\r\n\r\n")) == NULL)
-		goto err;
-
-	if ((p = strstr(p +4u, "\r\n")) == NULL)
-		goto err;
+		h->iovs[HTTP_IOV_TRG_LANG_KEY].iov_base = CONFIG_HTTP_QUERY_TL;
+		h->iovs[HTTP_IOV_TRG_LANG_KEY].iov_len  = sizeof(CONFIG_HTTP_QUERY_TL) - 1;
+		h->iovs[HTTP_IOV_TRG_LANG_VAL].iov_base = (char *)tl;
+		h->iovs[HTTP_IOV_TRG_LANG_VAL].iov_len  = strlen(tl);
+		break;
+	}
+}
 
 
-	/* Got the results */
-	moe->result = p +2u;
+static int
+http_request(Http *h, int type, const char sl[], const char tl[], const char hl[], const char text[])
+{
+	const char *const text_enc = __http_url_encode(h, text);
+	if (text_enc == NULL)
+		return -1;
 
-	if ((p = strstr(moe->result, "\r\n")) == NULL)
-		goto err;
+	const int fd = net_tcp_connect(h->host, h->port);
+	if (fd < 0)
+		return -1;
 
-	*p = '\0';
+	__http_build_request(h, type, sl, tl, hl, text_enc, h->buffer_len);
 
+	const ssize_t written = writev(fd, h->iovs, HTTP_IOVS_SIZE);
+	if (written < 0) {
+		perror(COLOR_REGULAR_YELLOW("http_request: writev"));
+		goto err0;
+	}
+
+	size_t total_len = 0;
+	for (size_t i = 0; i < LEN(h->iovs); i++)
+		total_len += h->iovs[i].iov_len;
+
+	if (total_len != (size_t)written) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("http_request: writev: incomplete: [%zu:%zu]") "\n",
+			written, total_len);
+		goto err0;
+	}
+
+
+	char *buffer = h->buffer.ptr;
+	size_t buffer_len = h->buffer.size;
+	size_t recvd = 0;
+	while (1) {
+		const ssize_t rv = recv(fd, buffer + recvd, buffer_len - recvd, 0);
+		if (rv < 0) {
+			perror(COLOR_REGULAR_YELLOW("http_request: recv"));
+			goto err0;
+		}
+
+		if (rv == 0)
+			break;
+
+		recvd += (size_t)rv;
+		switch (buffer_check(&h->buffer, recvd + 1)) {
+		case 0:
+			break;
+		case 1:
+			buffer = h->buffer.ptr;
+			buffer_len = h->buffer.size;
+			break;
+		case -1:
+			goto err0;
+		}
+	}
+
+	h->buffer_len = recvd;
+	buffer[recvd] = '\0';
+	close(fd);
 	return 0;
 
-err:
-	fprintf(stderr, "response_handler(): Failed to get the contents.\n");
+err0:
+	close(fd);
 	return -1;
 }
 
 
+/* TODO: improoooveee */
+static char *
+http_response_get_json(Http *h, size_t *ret_len)
+{
+	char *const buffer = h->buffer.ptr;
+	const size_t len = h->buffer_len;
+	if (len == 0)
+		goto err0;
+
+	char *first = strstr(buffer, "\r\n");
+	if (first == NULL)
+		goto err0;
+
+	*first = '\0';
+	if (strstr(buffer, "200") == NULL)
+		goto err0;
+
+	char *p = strstr(first + 1, "\r\n\r\n");
+	if (p == NULL)
+		goto err0;
+
+	char *json_start = strchr(p + 4, '[');
+	if (p == NULL)
+		goto err0;
+
+	char *json_end = cstr_last_find(buffer, len, ']');
+	if (json_end == NULL)
+		goto err0;
+
+	json_end++;
+	*json_end = '\0';
+
+	if (json_end > json_start)
+		*ret_len = (json_end - json_start); 
+	else
+		*ret_len = 0;
+
+	return json_start;
+
+err0:
+	fprintf(stderr, COLOR_REGULAR_YELLOW("http_response_get_json: invalid reponse") "\n");
+	return NULL;
+}
+
+
+/*
+ * MoeTr
+ */
 static int
-run(MoeTr *moe)
+moetr_init(MoeTr *m, char default_result_type, const Lang *default_langs[2])
 {
-	int ret;
+	memset(m, 0, sizeof(*m));
+	m->langs[0] = default_langs[0];
+	m->langs[1] = default_langs[1];
 
-	setup(moe);
-
-	if ((ret = inet_connect(moe)) < 0)
-		goto cleanup;
-
-	if ((ret = request_handler(moe)) < 0)
-		goto cleanup;
-
-	if ((ret = response_handler(moe)) < 0)
-		goto cleanup;
-
-	ret = run_func[moe->output_mode](moe);
-
-cleanup:
-	cleanup(moe);
-	return ret;
-}
-
-
-static int
-run_intrc(MoeTr *moe)
-{
-	IntrcCmd prs;
-	int      ret;
-	char    *input, *tmp;
-
-	info_intrc(moe);
-	SET_LANG_PROMPT(moe->lang_src->code, moe->lang_trg->code);
-
-	/* Show the results immediately if the text is not null */
-	if (moe->text != NULL) {
-		if ((ret = run(moe)) < 0)
-			goto ret1;
-		puts("------------------------\n");
-	}
-
-	ret = 0;
-	while (1) {
-		errno = 0;
-
-		if ((input = readline(prompt_intrc)) == NULL) {
-			putchar('\n');
-			goto ret0;
-		}
-
-		add_history(input);
-
-		tmp = cskip_rl(input, 0);
-		prs = intrc_parse_cmd(moe, tmp);
-
-		if (prs == QUIT)
-			goto ret0;
-
-		if (prs == OK || prs == ERR)
-			goto free_res;
-
-		/* let's go! */
-		moe->text = tmp;
-		if (*(moe->text) != '\0') {
-			puts("------------------------\n");
-
-			run(moe);
-
-			puts("------------------------\n");
-		}
-
-	free_res:
-		free(input);
-	}
-
-ret0:
-	free(input);
-
-ret1:
-	return ret;
-}
-
-
-static IntrcCmd
-intrc_parse_cmd(MoeTr *moe,
-		const char *cmd)
-{
-	ResultType res;
-	OutputMode out;
-
-
-	/* Summaries */
-	if (*(cmd++) == '/') {
-		switch (*cmd) {
-		case '\0': goto info;
-		case 'q' : { if (*(cmd +1u) == '\0') goto quit; } break;
-		case 'h' : { if (*(cmd +1u) == '\0') goto help; } break;
-		case 'c' : goto ch_lang;
-		case 'o' : goto ch_output;
-		case 'r' : goto ch_result;
-		}
-
-		goto err;
-	}
-
-	/* Default return */
-	return MISS;
-
-
-	/* Implementations */
-info:
-	info_intrc(moe);
-	return OK;
-
-quit:
-	return QUIT;
-
-help:
-	help_intrc(moe);
-	return OK;
-
-ch_lang:
-	if (set_lang(moe, cmd +1u) < 0)
-		goto err;
-
-	SET_LANG_PROMPT(moe->lang_src->code, moe->lang_trg->code);
-
-	return OK;
-
-ch_output:
-	out = atoi(cmd +1u);
-
-	switch (out) {
-	case PARSE: moe->output_mode = PARSE; break;
-	case RAW  : moe->output_mode = RAW  ; break;
-	default   : goto err;
-	}
-
-	printf("\nMode output has been changed: "
-		REGULAR_YELLOW("%s")
-		"\n\n",
-		output_mode_str[out]
-	);
-	return OK;
-
-ch_result:
-	res = atoi(cmd +1u);
-
-	switch (res) {
-	case BRIEF   : moe->result_type = BRIEF   ; break;
-	case DETAIL  : moe->result_type = DETAIL  ; break;
-	case DET_LANG: moe->result_type = DET_LANG; break;
-	default      : goto err;
-	}
-
-	printf("\nResult type has been changed: "
-		REGULAR_YELLOW("%s")
-		"\n\n",
-		result_type_str[res]
-	);
-	return OK;
-
-
-err:
-	errno = EINVAL;
-	perror(NULL);
-	putchar('\n');
-	return ERR;
-}
-
-
-static int
-raw(MoeTr *moe)
-{
-	return puts(moe->result);
-}
-
-
-static inline int
-parse(MoeTr *moe)
-{
-	cJSON *json;
-
-	if ((json = cJSON_Parse(moe->result)) == NULL)
+	if (moetr_set_result_type(m, default_result_type) < 0)
 		return -1;
 
-	parse_func[moe->result_type](moe, json);
+	if (http_init(&m->http) < 0)
+		return -1;
 
-	cJSON_Delete(json);
 	return 0;
 }
 
 
 static void
-parse_brief(MoeTr *moe, cJSON *json)
+moetr_deinit(MoeTr *m)
 {
-	(void)moe;
+	http_deinit(&m->http);
+}
 
-	cJSON *i;
 
-	cJSON_ArrayForEach(i, json->child) {
-		if (cJSON_IsString(i->child))
-			printf("%s", i->child->valuestring);
+static int
+moetr_set_langs(MoeTr *m, const char keys[])
+{
+	const int ret = lang_parse(m->langs, keys);
+	switch (ret) {
+	case -1:
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_set_langs: invalid keys format") "\n");
+		break;
+	case -2:
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_set_langs: invalid source lang") "\n");
+		break;
+	case -3:
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_set_langs: invalid target lang") "\n");
+		break;
+	case -4:
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_set_langs: invalid source and target langs") "\n");
+		break;
+	}
+
+	return ret;
+}
+
+
+static int
+moetr_set_result_type(MoeTr *m, char type)
+{
+	switch (tolower(type)) {
+	case 's':
+		m->result_type = RESULT_TYPE_SIMPLE;
+		break;
+	case 'd':
+		m->result_type = RESULT_TYPE_DETAIL;
+		break;
+	case 'l':
+		m->result_type = RESULT_TYPE_LANG;
+		break;
+	default:
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_set_result_type: invalid result type") "\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+
+static json_array_element_t *
+__json_array_index(json_array_t *arr, size_t index)
+{
+	size_t i = 0;
+	for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+		if (i == index)
+			return e;
+
+		i++;
+	}
+
+	return NULL;
+}
+
+
+static void
+__moetr_print_simple(json_value_t *json)
+{
+	json_array_t *arr = json_value_as_array(json);
+	if (arr == NULL)
+		return;
+
+	if (arr->length == 0)
+		return;
+
+	arr = json_value_as_array(arr->start->value);
+	if (arr == NULL)
+		return;
+
+	for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+		arr = json_value_as_array(e->value);
+		if (arr == NULL)
+			continue;
+
+		if (arr->length == 0)
+			continue;
+
+		json_string_t *const s = json_value_as_string(arr->start->value);
+		if (s == NULL)
+			continue;
+
+		printf("%.*s", (int)s->string_size, s->string);
 	}
 
 	putchar('\n');
@@ -680,405 +902,672 @@ parse_brief(MoeTr *moe, cJSON *json)
 
 
 static void
-parse_detail(MoeTr *moe, cJSON *json)
+__moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 {
-	/*
-	   source text 
-	  	|
-	   corrections
-	  	|
-	 source spelling
-	  	|
-	   source lang
-	  	|
-	   target text
-	  	|
-	  target speling
-	  	|
-	   target lang
-	  	|
-	    synonyms
-	  	|
-	   definitions
-	  	|
-	    examples
-	 */
-
-	cJSON *i;
-	cJSON *tr_txt   = json->child;
-	cJSON *exmpls   = cJSON_GetArrayItem(json, 13);
-	cJSON *defs     = cJSON_GetArrayItem(json, 12);
-	cJSON *splls    = cJSON_GetArrayItem(tr_txt, cJSON_GetArraySize(tr_txt) -1);
-	cJSON *src_cor  = cJSON_GetArrayItem(json, 7);
-	cJSON *src_lang = cJSON_GetArrayItem(json, 2);
-	cJSON *synms    = cJSON_GetArrayItem(json, 1);
-	cJSON *src_spll = cJSON_GetArrayItem(splls, 3);
-	cJSON *trg_spll = cJSON_GetArrayItem(splls, 2);
-
-	cJSON *src_synn;
-	cJSON *trg_synn;
-	cJSON *def_subs;
-	cJSON *def_cre;
-	cJSON *def_vals;
-	cJSON *exmpl_vals;
-
-	/* Source text */
-	printf("\"%s\"\n", moe->text);
-
-	/* Corrections */
-	if (cJSON_IsString(src_cor->child)) {
-		printf("\n"
-			BOLD_YELLOW("Did you mean: ")
-			"\"%s\" " BOLD_YELLOW("?") "\n\n",
-			src_cor->child->next->valuestring
-		);
-	}
-
-	/* Source spelling */
-	if (cJSON_IsString(src_spll))
-		printf("( " REGULAR_YELLOW("%s") " )\n", src_spll->valuestring);
-
-	/* Source lang */
-	if (cJSON_IsString(src_lang)) {
-		const Lang *src_l = get_lang(src_lang->valuestring);
-
-		printf(REGULAR_GREEN("[ %s ]:") " %s\n\n",
-			src_lang->valuestring,
-			(src_l == NULL? "Unknown" : src_l->value)
-		);
-	}
-
-	/* Target text */
-	cJSON_ArrayForEach(i, tr_txt) {
-		if (cJSON_IsString(i->child)) {
-			printf(BOLD_WHITE("%s"), i->child->valuestring);
-		}
-	}
-
-	putchar('\n');
-
-	/* Target spelling */
-	if (cJSON_IsString(trg_spll))
-		printf("( " REGULAR_YELLOW("%s") " )\n", trg_spll->valuestring);
-
-	/* Target lang */
-	printf(REGULAR_GREEN("[ %s ]:") " %s\n",
-		moe->lang_trg->code, moe->lang_trg->value
-	);
-
-	putchar('\n');
-
-	/* Synonyms */
-	if (!cJSON_IsArray(synms) || SYNONYM_MAX_LINE == 0)
-		goto defs_sect;
-
 	printf("\n------------------------");
+	for (json_array_element_t *e = synonyms_a->start; e != NULL; e = e->next) {
+		int iter = 1;
+		int max  = CONFIG_SYN_LINES_MAX;
+		json_array_t *arr;
+		json_string_t *str;
 
-	cJSON_ArrayForEach(i, synms) {
-		int iter     = 1;
-		int synn_max = SYNONYM_MAX_LINE;
 
-		/* Verbs, Nouns, etc */
-		if (*(i->child->valuestring) == '\0') {
-			/* No label */
-			printf("\n" BOLD_BLUE("[ + ]"));
+		arr = json_value_as_array(e->value);
+		if (arr == NULL)
+			continue;
 
+		/* verbs, nouns, etc. */
+		str = json_value_as_string(__json_array_index(arr, 0)->value);
+		if (str == NULL) {
+			/* no label */
+			printf("\n" COLOR_BOLD_BLUE("[+]"));
 		} else {
-			SUBTITLE(i->child->valuestring);
-			printf("\n" BOLD_BLUE("[ %s ]"), i->child->valuestring);
+			printf("\n" COLOR_BOLD_BLUE("[%c%.*s]"), toupper(str->string[0]),
+			       (int)str->string_size - 1, &str->string[1]);
 		}
 
-		/* Target alternatives */
-		cJSON_ArrayForEach(trg_synn, cJSON_GetArrayItem(i, 2)) {
-			if (synn_max == 0)
+		/* target alternative(s) */
+		arr = json_value_as_array(__json_array_index(arr, 2)->value);
+		if (arr == NULL)
+			continue;
+
+		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
+			json_array_t *_arr;
+			if (max == 0)
 				break;
 
-			SUBTITLE(trg_synn->child->valuestring);
-			printf("\n" BOLD_WHITE("%d. %s:") "\n   "
-				REGULAR_YELLOW("-> "), iter, trg_synn->child->valuestring
-			);
+			_arr = json_value_as_array(ee->value);
+			if (_arr == NULL)
+				continue;
 
-			/* Source alternatives */
-			int synn_src_size = cJSON_GetArraySize(
-						cJSON_GetArrayItem(trg_synn, 1)) -1;
+			str = json_value_as_string(__json_array_index(_arr, 0)->value);
+			if (str == NULL)
+				continue;
 
-			cJSON_ArrayForEach(src_synn, cJSON_GetArrayItem(trg_synn, 1)) {
-				printf("%s", src_synn->valuestring);
+			printf("\n" COLOR_BOLD_WHITE("%d. %c%.*s:") "\n   "
+			       COLOR_REGULAR_YELLOW("-> "), iter, toupper(str->string[0]),
+			       (int)str->string_size, &str->string[1]);
 
-				if (synn_src_size > 0) {
+			/* source alternatives */
+			_arr = json_value_as_array(__json_array_index(_arr, 1)->value);
+			if (_arr == NULL)
+				continue;
+
+			int _size = ((int)_arr->length) - 1;
+			for (json_array_element_t *eee = _arr->start; eee != NULL; eee = eee->next) {
+				str = json_value_as_string(eee->value);
+				if (str == NULL)
+					continue;
+
+				printf("%.*s", (int)str->string_size, str->string);
+				if (_size > 0) {
 					printf(", ");
-					synn_src_size--;
+					_size--;
 				}
 			}
 
 			iter++;
-			synn_max--;
+			max--;
 		}
 		putchar('\n');
 	}
 	putchar('\n');
+}
 
 
-defs_sect:
-	/* Definitions */
-	if (!cJSON_IsArray(defs) || DEFINITION_MAX_LINE == 0)
-		goto exmpls_sect;
-
+static void
+__moetr_print_detail_defs(const json_array_t *defs_a)
+{
 	printf("\n------------------------");
+	for (json_array_element_t *e = defs_a->start; e != NULL; e = e->next) {
+		int iter = 1;
+		int max = CONFIG_DEF_LINES_MAX;
+		json_array_t *arr;
+		json_string_t *str;
 
-	cJSON_ArrayForEach(i, defs) {
-		int iter     = 1;
-		int defs_max = DEFINITION_MAX_LINE;
 
+		arr = json_value_as_array(e->value);
+		if (arr == NULL)
+			continue;
 
-		if (*(i->child->valuestring) == '\0') {
-			/* No label */
-			printf("\n" BOLD_YELLOW("[ + ]"));
-
+		/* verbs, nouns, etc. */
+		str = json_value_as_string(__json_array_index(arr, 0)->value);
+		if (str == NULL) {
+			/* no label */
+			printf("\n" COLOR_BOLD_YELLOW("[+]"));
 		} else {
-			SUBTITLE(i->child->valuestring);
-			printf("\n" BOLD_YELLOW("[ %s ]"), i->child->valuestring);
+			printf("\n" COLOR_BOLD_YELLOW("[%c%.*s]"), toupper(str->string[0]),
+			       (int)str->string_size - 1, &str->string[1]);
 		}
 
-		cJSON_ArrayForEach(def_subs, cJSON_GetArrayItem(i, 1)) {
-			if (defs_max == 0)
+		arr = json_value_as_array(__json_array_index(arr, 1)->value);
+		if (arr == NULL)
+			continue;
+
+		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
+			json_array_t *_arr, *__arr;
+			if (max == 0)
 				break;
 
-			SUBTITLE(def_subs->child->valuestring);
-			printf("\n" BOLD_WHITE("%d. %s"),
-				iter, def_subs->child->valuestring
-			);
+			_arr = json_value_as_array(ee->value);
+			if (_arr == NULL)
+				continue;
 
-			def_cre = cJSON_GetArrayItem(def_subs, 3);
-			if (cJSON_IsArray(def_cre) &&
-					cJSON_IsString(def_cre->child->child)) {
+			str = json_value_as_string(__json_array_index(_arr, 0)->value);
+			if (str == NULL)
+				continue;
 
-				printf(REGULAR_GREEN(" [ %s ]"),
-					def_cre->child->child->valuestring
-				);
+			printf("\n" COLOR_BOLD_WHITE("%d. %c%.*s"), iter, toupper(str->string[0]),
+			       (int)str->string_size, &str->string[1]);
+
+			if (_arr->length > 3) {
+				__arr = json_value_as_array(__json_array_index(_arr, 3)->value);
+				if (__arr != NULL) {
+					__arr = json_value_as_array(__arr->start->value);
+					if (__arr != NULL) {
+						str = json_value_as_string(__arr->start->value);
+						if (str != NULL) {
+							printf(COLOR_REGULAR_GREEN(" [%.*s] "),
+							       (int)str->string_size, str->string);
+						}
+					}
+				}
 			}
 
-			def_vals = cJSON_GetArrayItem(def_subs, 2);
-			if (cJSON_IsString(def_vals)) {
-				SUBTITLE(def_vals->valuestring);
-				printf("\n" REGULAR_YELLOW("   ->") " %s ", def_vals->valuestring);
+			if (_arr->length > 2) {
+				str = json_value_as_string(__json_array_index(_arr, 2)->value);
+				if (str != NULL) {
+					printf("\n" COLOR_REGULAR_YELLOW("   ->") " %c%.*s ",
+					       toupper(str->string[0]), (int)str->string_size,
+					       &str->string[1]);
+				}
 			}
 
 			iter++;
-			defs_max--;
+			max--;
 		}
+
 		putchar('\n');
 	}
 	putchar('\n');
+}
 
 
-exmpls_sect:
-	if (!cJSON_IsArray(exmpls) || EXAMPLE_MAX_LINE == 0)
-		return; /* It's over */
-
+static void
+__moetr_print_detail_examples(json_array_t *examples_a)
+{
 	printf("\n------------------------\n");
 
-	int iter = 1, exmpls_max = EXAMPLE_MAX_LINE;
+	int iter = 1;
+	int max = CONFIG_EXM_LINES_MAX;
+	char buffer[CONFIG_EXM_BUFFER_SIZE];
+	for (json_array_element_t *e = examples_a->start; e != NULL; e = e->next) {
+		json_array_t *arr = json_value_as_array(e->value);
+		if (arr == NULL)
+			continue;
 
-	cJSON_ArrayForEach(i, exmpls) {
-		cJSON_ArrayForEach(exmpl_vals, i) {
-			if (exmpls_max == 0)
+		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
+			if (max == 0)
 				break;
 
-			SUBTITLE(cskip_html_tags(exmpl_vals->child->valuestring, 0));
-			printf("%d. " REGULAR_YELLOW("%s") "\n",
-				iter, exmpl_vals->child->valuestring
-			);
+			arr = json_value_as_array(ee->value);
+			if (arr == NULL)
+				continue;
+
+			json_string_t *const str = json_value_as_string(arr->start->value);
+			if (str == NULL)
+				continue;
+
+			if (str->string_size >= sizeof(buffer))
+				continue;
+
+			const size_t len = str->string_size;
+			memcpy(buffer, str->string, len);
+			buffer[len] = '\0';
+			buffer[0] = toupper(buffer[0]);
+
+			printf("%d. " COLOR_REGULAR_YELLOW("%s") "\n", iter,
+			       cstr_skip_html_tags(buffer, len));
 
 			iter++;
-			exmpls_max--;
+			max--;
 		}
+
 		putchar('\n');
 	}
 }
 
 
 static void
-parse_detect_lang(MoeTr *moe, cJSON *json)
+__moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 {
-	(void)moe;
+	json_array_t *const root_a = json_value_as_array(json);
+	if ((root_a == NULL) || root_a->length == 0)
+		return;
 
-	cJSON *lang_src = json->child->next->next;
 
-	if (cJSON_IsString(lang_src)) {
-		const Lang *src_l = get_lang(lang_src->valuestring);
+	char buffer[CONFIG_PRINT_BUFFER_SIZE];
+	const int buffer_set = setvbuf(stdout, buffer, _IOFBF, CONFIG_PRINT_BUFFER_SIZE);
 
-		printf("%s (%s)\n",
-			lang_src->valuestring,
-			(src_l == NULL? "Unknown" : src_l->value)
-		);
+
+	json_array_t *const text_a = json_value_as_array(__json_array_index(root_a, 0)->value);
+	json_array_t *const examples_a = json_value_as_array(__json_array_index(root_a,  13)->value);
+	json_array_t *const defs_a = json_value_as_array(__json_array_index(root_a, 12)->value);
+
+	json_array_t *splls_a = NULL;
+	if (text_a != NULL)
+		splls_a = json_value_as_array(__json_array_index(text_a, text_a->length - 1)->value);
+
+	json_string_t *src_splls_s = NULL;
+	json_string_t *trg_splls_s = NULL;
+	if (splls_a != NULL) {
+		if (splls_a->length > 3)
+			src_splls_s = json_value_as_string(__json_array_index(splls_a, 3)->value);
+
+		trg_splls_s = json_value_as_string(__json_array_index(splls_a, 2)->value);
+	}
+
+	json_array_t *const src_cor_a = json_value_as_array(__json_array_index(root_a, 7)->value);
+	json_string_t *const src_lang_s = json_value_as_string(__json_array_index(root_a, 2)->value);
+	json_array_t *const synonyms_a = json_value_as_array(__json_array_index(root_a, 1)->value);
+
+
+	/* source: correction */
+	if (src_cor_a != NULL && src_cor_a->length > 1) {
+		json_string_t *const str = json_value_as_string(src_cor_a->start->next->value);
+		if (str != NULL) {
+			printf(COLOR_BOLD_GREEN("Did you mean: ") "\"%.*s\" "
+			       COLOR_BOLD_GREEN("?") "\n\n", (int)str->string_size, str->string);
+		}
+	}
+
+
+	/* source: text */
+	printf(COLOR_REGULAR_YELLOW("%s") "\n", src_text);
+
+
+	/* source: spelling */
+	if (src_splls_s != NULL) {
+		printf("(" COLOR_REGULAR_GREEN("%.*s") ")\n", (int)src_splls_s->string_size,
+		       src_splls_s->string);
+	}
+
+
+	/* source: language */
+	if ((src_lang_s != NULL) && (strcasecmp("auto", m->langs[0]->key) == 0)) {
+		const Lang *lang = NULL;
+		const char *lang_key = "unknown";
+		const char *lang_val = "unknown";
+		if (lang_get_from_key_s(src_lang_s->string, src_lang_s->string_size, &lang) == 0) {
+			lang_key = lang->key;
+			lang_val = lang->value;
+		}
+
+		printf(COLOR_BOLD_GREEN("[%s]:") COLOR_BOLD_WHITE(" %s") "\n", lang_key, lang_val);
+	}
+	printf("\n------------------------\n");
+
+
+	/* target: text */
+	if (text_a != NULL) {
+		for (json_array_element_t *e = text_a->start; e != NULL; e = e->next) {
+			json_array_t *const arr = json_value_as_array(e->value);
+			if (arr == NULL)
+				continue;
+
+			if (arr->length == 0)
+				continue;
+
+			json_string_t *const s = json_value_as_string(arr->start->value);
+			if (s == NULL)
+				continue;
+
+			printf("%.*s", (int)s->string_size, s->string);
+		}
+
+		putchar('\n');
+	}
+
+
+	/* target: spelling */
+	if (trg_splls_s != NULL) {
+		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size,
+		       trg_splls_s->string);
+	}
+
+
+	/* target: language */
+	//printf(COLOR_BOLD_GREEN("[%s]:") COLOR_BOLD_WHITE(" %s") "\n", m->langs[1]->key,
+	//       m->langs[1]->value);
+
+
+	/* synonyms */
+	if ((synonyms_a != NULL) && (CONFIG_SYN_LINES_MAX != 0))
+		__moetr_print_detail_synonyms(synonyms_a);
+
+
+	/* definitions */
+	if ((defs_a != NULL) && (CONFIG_DEF_LINES_MAX != 0))
+		__moetr_print_detail_defs(defs_a);
+
+
+	/* examples */
+	if ((examples_a != NULL) && (CONFIG_EXM_LINES_MAX != 0))
+		__moetr_print_detail_examples(examples_a);
+
+
+	if (buffer_set == 0) {
+		fflush(stdout);
+		setvbuf(stdout, NULL, _IOLBF, 0);
 	}
 }
 
 
-static inline void
-help(void)
+static void
+__moetr_print_detect_lang(json_value_t *json)
 {
-	printf("moetranslate - A simple language translator\n\n"
-		"Usage: moetranslate [-i/-b/-f/-r/-d/-h] [SOURCE] [TARGET] [TEXT]\n"
-		"       -b         Brief output\n"
-		"       -f         Full/detail output\n"
-		"       -r         Raw output (json)\n"
-		"       -d         Detect language\n"
-		"       -i         Interactive input mode\n"
-		"       -h         Show this help\n\n"
+	json_array_t *const arr = json_value_as_array(json);
+	if (arr == NULL)
+		return;
+
+	if (arr->length < 3)
+		return;
+
+	json_string_t *const str = json_value_as_string(arr->start->next->next->value);
+	if (str == NULL)
+		return;
+
+	const Lang *lang = NULL;
+	const char *lang_val = "unknown";
+	if (lang_get_from_key_s(str->string, str->string_size, &lang) == 0)
+		lang_val = lang->value;
+
+	printf("%.*s (%s)\n", (int)str->string_size, str->string, lang_val);
+}
+
+
+static int
+moetr_translate(MoeTr *m, const char text[])
+{
+	const char *src = m->langs[0]->key;
+	const char *trg = m->langs[1]->key;
+	if (http_request(&m->http, m->result_type, src, trg, trg, text) < 0)
+		return -1;
+
+	size_t len;
+	char *const res = http_response_get_json(&m->http, &len);
+	if (res == NULL)
+		return -1;
+
+	json_value_t *const json = json_parse(res, len);
+	if (json == NULL) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("moetr_translate: json_parse: failed to parse") "\n");
+		return -1;
+	}
+
+	switch (m->result_type) {
+	case RESULT_TYPE_SIMPLE:
+		__moetr_print_simple(json);
+		break;
+	case RESULT_TYPE_DETAIL:
+		__moetr_print_detail(m, json, text);
+		break;
+	case RESULT_TYPE_LANG:
+		__moetr_print_detect_lang(json);
+		break;
+	}
+
+	free(json);
+	return 0;
+}
+
+
+static void
+__moetr_interactive_banner(const MoeTr *m)
+{
+	printf(COLOR_BOLD_WHITE("---[ Moetranslate ]---") "\n"
+	       COLOR_BOLD_GREEN("Languages:         ") "%s (%s) -> %s (%s)\n"
+	       COLOR_BOLD_GREEN("Result type:       ") "%s (%s)\n"
+	       COLOR_BOLD_GREEN("Show command list: ") "Type '/' and [Enter]\n\n",
+	       m->langs[0]->value, m->langs[0]->key, m->langs[1]->value, m->langs[1]->key,
+	       result_type_str[m->result_type][0], result_type_str[m->result_type][1]);
+}
+
+
+static void
+__moetr_interactive_help(void)
+{
+	printf(COLOR_BOLD_GREEN("Change languages: ") COLOR_REGULAR_YELLOW("/c") " [SOURCE]:[TARGET]\n"
+	       COLOR_BOLD_GREEN("Result type:      ") COLOR_REGULAR_YELLOW("/r") " [TYPE]\n"
+	                        "                      %s = %s\n"
+	                        "                      %s = %s\n"
+	                        "                      %s = %s\n"
+	       COLOR_BOLD_GREEN("Show languages:   ") COLOR_REGULAR_YELLOW("/l") " [NUM]\n"
+	       COLOR_BOLD_GREEN("Quit:             ") COLOR_REGULAR_YELLOW("/q") "\n\n",
+	       result_type_str[RESULT_TYPE_SIMPLE][0],
+	       result_type_str[RESULT_TYPE_SIMPLE][1],
+	       result_type_str[RESULT_TYPE_DETAIL][0],
+	       result_type_str[RESULT_TYPE_DETAIL][1],
+	       result_type_str[RESULT_TYPE_LANG][0],
+	       result_type_str[RESULT_TYPE_LANG][1]);
+}
+
+
+static int
+__moetr_interactive_parse(char *cmd[])
+{
+	char *_cmd = *cmd;
+	if (*_cmd == '\0')
+		return MOETR_INTR_CODE_NOP;
+
+	/*
+	 * escape '/' character by adding '\' prefix:
+	 * example: \/q
+	 */
+	if ((*_cmd == '\\') && (*(_cmd + 1) == '/')) {
+		*cmd = _cmd + 1;
+		return MOETR_INTR_CODE_TRANSLATE;
+	}
+
+	if (*(_cmd++) != '/')
+		return MOETR_INTR_CODE_TRANSLATE;
+
+	switch (tolower(*_cmd)) {
+	case 'c':
+		*cmd = _cmd + 1;
+		return MOETR_INTR_CODE_CHANGE_LANGS;
+	case 'r':
+		_cmd = cstr_trim_right_mut(cstr_trim_left_mut(_cmd + 1));
+		if (strlen(_cmd) > 1)
+			break;
+
+		*cmd = _cmd;
+		return MOETR_INTR_CODE_CHANGE_RESTYPE;
+	case 'l':
+		if (*(_cmd + 1) == '\0')
+			*cmd = "2";
+		else
+			*cmd = _cmd + 1;
+
+		return MOETR_INTR_CODE_LANG_LIST;
+	case '\0':
+		return MOETR_INTR_CODE_HELP;
+	case 'q':
+		return MOETR_INTR_CODE_QUIT;
+	}
+
+	return MOETR_INTR_CODE_ERROR;
+}
+
+
+static void
+__moetr_set_prompt(MoeTr *m)
+{
+	snprintf(m->prompt, sizeof(m->prompt), COLOR_BOLD_WHITE("[%s:%s][%s]->") " ",
+		 m->langs[0]->key, m->langs[1]->key, result_type_str[m->result_type][0]);
+}
+
+
+static void
+moetr_interactive(MoeTr *m, const char text[])
+{
+	setlocale(LC_CTYPE, "");
+	stifle_history(CONFIG_INTERACTIVE_HISTORY_SIZE);
+	__moetr_set_prompt(m);
+	__moetr_interactive_banner(m);
+
+	if (text != NULL)
+		moetr_translate(m, text);
+
+	int is_alive = 1;
+	while (is_alive) {
+		char *const res = readline(m->prompt);
+		if (res == NULL)
+			return;
+
+		char *cmd = cstr_trim_right_mut(cstr_trim_left_mut(res));
+		switch (__moetr_interactive_parse(&cmd)) {
+		case MOETR_INTR_CODE_TRANSLATE:
+			puts("------------------------");
+			moetr_translate(m, cmd);
+			puts("------------------------");
+			break;
+		case MOETR_INTR_CODE_CHANGE_LANGS:
+			if (moetr_set_langs(m, cmd) == 0)
+				__moetr_set_prompt(m);
+
+			cmd = res;
+			break;
+		case MOETR_INTR_CODE_CHANGE_RESTYPE:
+			if (moetr_set_result_type(m, *cmd) == 0)
+				__moetr_set_prompt(m);
+
+			cmd = res;
+			break;
+		case MOETR_INTR_CODE_NOP:
+			break;
+		case MOETR_INTR_CODE_LANG_LIST:
+			lang_show_list(atoi(cmd));
+			cmd = res;
+			break;
+		case MOETR_INTR_CODE_HELP:
+			__moetr_interactive_help();
+			break;
+		case MOETR_INTR_CODE_QUIT:
+			is_alive = 0;
+			break;
+		case MOETR_INTR_CODE_ERROR:
+		default:
+			puts("Invalid command!");
+		}
+
+		if (*cmd != '\0')
+			add_history(cmd);
+
+		free(res);
+	}
+}
+
+
+/*
+ * Main
+ */
+static void
+__help(const char name[])
+{
+	printf("%s - A simple language translator\n\n"
+		"Usage: moetranslate -[s/d/l/i/L/h] [SOURCE:TARGET] [TEXT]\n"
+		"   -s            Simple mode\n"
+		"   -d            Detail mode\n"
+		"   -l            Detect language\n"
+		"   -L            Language list\n"
+		"   -i            Interactive mode\n"
+		"   -h            Show help\n\n"
 		"Examples:\n"
-		"   Brief Mode  :  moetranslate -b en:id \"Hello\"\n"
-		"   Full Mode   :  moetranslate -f id:en \"Halo\"\n"
-		"   Auto Lang   :  moetranslate -f auto:en \"こんにちは\"\n"
-		"   Detect Lang :  moetranslate -d \"你好\"\n"
-		"   Interactive :  moetranslate -i\n"
-		"                  moetranslate -i -f auto:en\n"
+		"   Simple Mode:   %s -s en:id \"Hello world\"\n"
+		"   Detail Mode:   %s -d id:en Halo\n"
+		"   Auto Lang:     %s -d auto:en こんにちは\n"
+		"   Detect Lang:   %s -l 你好\n"
+		"   Language list: %s -L [NUM]\n"
+		"   Interactive:   %s -i\n"
+		"                  %s -i -d auto:en\n"
+		"                  %s -i -d :en hello\n",
+		name, name, name, name, name, name, name, name, name
 	);
 }
 
 
-static inline void
-help_intrc(const MoeTr *moe)
+static void
+__load_default(char *type, const Lang *langs[2])
 {
-	printf("------------------------\n"
-		BOLD_WHITE("Change the Languages:")
-		" -> [%s:%s]\n"
-	        " /c [SOURCE]:[TARGET]\n\n"
-		BOLD_WHITE("Result Type:         ")
-		" -> [%s]\n"
-		" /r [TYPE]\n"
-		"     TYPE:\n"
-                "      1 = Brief\n"
-	        "      2 = Detail\n"
-	        "      3 = Detect Language\n\n"
-	        BOLD_WHITE("Change Output Mode:  ")
-		" -> [%s]\n"
-	        " /o [OUTPUT]\n"
-	        "     OUTPUT:\n"
-		"      1 = Parse\n"
-		"      2 = Raw\n\n"
-	        BOLD_WHITE("Show Help:")
-		"\n"
-	        " /h\n\n"
-	        BOLD_WHITE("Quit:")
-		"\n"
-	        " /q\n"
-	        "------------------------\n",
+	if (CONFIG_BUFFER_SIZE > CONFIG_BUFFER_MAX_SIZE) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("config: invalid buffer size!") "\n");
+		exit(1);
+	}
 
-		moe->lang_src->code, moe->lang_trg->code,
-		result_type_str[moe->result_type],
-		output_mode_str[moe->output_mode]
-	);
+	if ((CONFIG_LANG_INDEX_SRC < 0) || (CONFIG_LANG_INDEX_SRC > (LEN(lang_pack) - 1))) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("config: invalid source lang!") "\n");
+		exit(1);
+	}
+
+	if ((CONFIG_LANG_INDEX_TRG <= 0) || (CONFIG_LANG_INDEX_TRG > (LEN(lang_pack) - 1))) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("config: invalid target lang!") "\n");
+		exit(1);
+	}
+
+	if ((CONFIG_RESULT_TYPE < RESULT_TYPE_SIMPLE) || (CONFIG_RESULT_TYPE > RESULT_TYPE_LANG)) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("config: invalid result type!") "\n");
+		exit(1);
+	}
+
+	langs[0] = &lang_pack[CONFIG_LANG_INDEX_SRC];
+	langs[1] = &lang_pack[CONFIG_LANG_INDEX_TRG];
+	*type = result_type_str[CONFIG_RESULT_TYPE][0][0];
 }
-
-
-static inline void
-info_intrc(const MoeTr *moe)
-{
-	printf(BOLD_WHITE("----[ Moetranslate ]----")
-		"\n"
-	        BOLD_YELLOW("Interactive input mode")
-	        "\n\n"
-	        BOLD_WHITE("Languages   :")
-		                        " %s (%s)\n"
-		           "              %s (%s)\n"
-	        BOLD_WHITE("Result type :") " %s\n"
-	        BOLD_WHITE("Output mode :") " %s\n"
-		BOLD_WHITE("Show help   :") " Type /h\n\n"
-	        "------------------------\n",
-
-	        moe->lang_src->value, moe->lang_src->code,
-		moe->lang_trg->value, moe->lang_trg->code,
-		result_type_str[moe->result_type],
-	        output_mode_str[moe->output_mode]
-	);
-}
-
 
 
 int
 main(int argc, char *argv[])
 {
-	int   opt;
-	bool  is_intrc = false;
-	bool  is_detc  = false;
-	MoeTr moe      = { 0 };
+	int ret = EXIT_FAILURE;
+	int opt;
+	int lang_list_max_col = 0;
+	int is_interactive = 0;
+	int is_detect_lang = 0;
+	char result_type;
+	char *text = NULL;
+	const Lang *langs[2];
+	MoeTr moe;
 
 
-	if (argc == 1)
-		goto einv0;
+	__load_default(&result_type, langs);
+	if (moetr_init(&moe, result_type, langs) < 0)
+		return ret;
 
-	setlocale(LC_CTYPE, "");
-	load_config_h(&moe);
-
-	while ((opt = getopt(argc, argv, "b:f:d:rih")) != -1) {
+	while ((opt = getopt(argc, argv, "s:d:l:iLh")) != -1) {
 		switch (opt) {
-		case 'b':
-			moe.result_type = BRIEF;
-			if (set_lang(&moe, cskip_l(argv[optind -1])) < 0)
-				goto einv1;
+		case 's':
+			moetr_set_result_type(&moe, 's');
+			if (moetr_set_langs(&moe, cstr_trim_left_mut(argv[optind - 1])) < 0)
+				goto out0;
 			break;
-
-		case 'f':
-			moe.result_type = DETAIL;
-			if (set_lang(&moe, cskip_l(argv[optind -1])) < 0)
-				goto einv1;
-			break;
-
 		case 'd':
-			moe.result_type = DET_LANG;
-			is_detc         = true;
+			moetr_set_result_type(&moe, 'd');
+			if (moetr_set_langs(&moe, cstr_trim_left_mut(argv[optind - 1])) < 0)
+				goto out0;
 			break;
-
-		case 'r':
-			moe.output_mode = RAW;
+		case 'l':
+			moetr_set_result_type(&moe, 'l');
+			is_detect_lang = 1;
 			break;
-
 		case 'i':
-			is_intrc = true;
+			is_interactive = 1;
 			break;
+		case 'L':
+			if (optind < argc) {
+				if (argv[optind][0] == '-')
+					lang_list_max_col = atoi(&argv[optind][2]);
+				else
+					lang_list_max_col = atoi(argv[optind]);
+			}
 
+			lang_show_list(lang_list_max_col);
+			ret = EXIT_SUCCESS;
+			goto out0;
 		case 'h':
-			help();
-			return EXIT_SUCCESS;
-
+			__help(argv[0]);
+			ret = EXIT_SUCCESS;
+			goto out0;
 		default:
-			goto einv0;
+			goto out0;
 		}
 	}
 
 
-	if (is_detc)
-		moe.text = cskip_rl(argv[optind -1], 0);
+	if (is_detect_lang)
+		text = cstr_trim_right_mut(cstr_trim_left_mut(argv[optind - 1]));
 	else if (optind < argc)
-		moe.text = cskip_rl(argv[optind], 0);
-	else
-		moe.text = NULL;
+		text = cstr_trim_right_mut(cstr_trim_left_mut(argv[optind]));
 
-
-	if (is_intrc) {
-		if (run_intrc(&moe) < 0)
-			goto err;
-
-	} else if (moe.text != NULL) {
-		if (run(&moe) < 0)
-			goto err;
-
+	if (is_interactive) {
+		moetr_interactive(&moe, text);
+	} else if (text != NULL) {
+		if (moetr_translate(&moe, text) < 0)
+			goto out1;
 	} else {
-		goto einv0;
+		goto out0;
 	}
 
-	return EXIT_SUCCESS;
+	ret = EXIT_SUCCESS;
 
-einv0:
-	errno = EINVAL;
+out0:
+	if (ret == EXIT_FAILURE) {
+		fprintf(stderr, COLOR_REGULAR_YELLOW("Error: invalid argument!") "\n\n");
+		__help(argv[0]);
+	}
 
-einv1:
-	fprintf(stderr, "Error: %s!\n\n", strerror(errno));
-	help();
-
-err:
-	return EXIT_FAILURE;
+out1:
+	moetr_deinit(&moe);
+	return ret;
 }
 
