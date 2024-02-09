@@ -58,7 +58,7 @@ static size_t      cstr_trim_right(const char cstr[], size_t len);
 static const char *cstr_trim_left(const char cstr[], size_t *len);
 static char       *cstr_trim_right_mut(char cstr[]);
 static char       *cstr_trim_left_mut(char cstr[]);
-static const char *cstr_skip_html_tags(char raw[], size_t len);
+static char       *cstr_skip_html_tags(char raw[], size_t len);
 static char       *cstr_last_find(char cstr[], size_t len, int c);
 
 
@@ -260,7 +260,7 @@ cstr_trim_left_mut(char cstr[])
 }
 
 
-static const char *
+static char *
 cstr_skip_html_tags(char raw[], size_t len)
 {
 	const struct {
@@ -1084,10 +1084,11 @@ __moetr_print_detail_examples(json_array_t *examples_a)
 			const size_t len = str->string_size;
 			memcpy(buffer, str->string, len);
 			buffer[len] = '\0';
-			buffer[0] = toupper(buffer[0]);
 
-			printf("%d. " COLOR_REGULAR_YELLOW("%s") "\n", iter,
-			       cstr_skip_html_tags(buffer, len));
+			char *const res = cstr_skip_html_tags(buffer, len);
+			res[0] = toupper(res[0]);
+
+			printf("%d. " COLOR_REGULAR_YELLOW("%s") "\n", iter, res);
 
 			iter++;
 			max--;
