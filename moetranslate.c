@@ -5,13 +5,11 @@
  * See LICENSE file for license details
  */
 
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
@@ -59,7 +57,6 @@ static const char *cstr_trim_left(const char cstr[], size_t *len);
 static char       *cstr_trim_right_mut(char cstr[]);
 static char       *cstr_trim_left_mut(char cstr[]);
 static char       *cstr_skip_html_tags(char raw[], size_t len);
-static char       *cstr_last_find(char cstr[], size_t len, int c);
 
 
 /*
@@ -299,24 +296,6 @@ cstr_skip_html_tags(char raw[], size_t len)
 	}
 
 	return raw;
-}
-
-
-static char *
-cstr_last_find(char cstr[], size_t len, int c)
-{
-	if (len == 0)
-		return cstr;
-
-	char *p = cstr + (len - 1);
-	while (*p && (p > cstr)) {
-		if (*p == c)
-			return p;
-
-		p--;
-	}
-	
-	return NULL;
 }
 
 
@@ -736,16 +715,14 @@ err0:
 }
 
 
-/* TODO: improoooveee */
 static char *
 http_response_get_json(Http *h, size_t *ret_len)
 {
 	char *const buffer = h->buffer.ptr;
-	const size_t len = h->buffer_len;
-	if (len == 0)
+	if (h->buffer_len == 0)
 		goto err0;
 
-	char *first = strstr(buffer, "\r\n");
+	char *const first = strstr(buffer, "\r\n");
 	if (first == NULL)
 		goto err0;
 
@@ -753,26 +730,22 @@ http_response_get_json(Http *h, size_t *ret_len)
 	if (strstr(buffer, "200") == NULL)
 		goto err0;
 
-	char *p = strstr(first + 1, "\r\n\r\n");
-	if (p == NULL)
+	char *const end = strstr(first + 2, "\r\n\r\n");
+	if (end == NULL)
 		goto err0;
 
-	char *json_start = strchr(p + 4, '[');
-	if (p == NULL)
+	char *const json_start = strchr(end + 4, '[');
+	if (json_start == NULL)
 		goto err0;
 
-	char *json_end = cstr_last_find(buffer, len, ']');
+	char *const json_end = strrchr(json_start + 1, ']');
 	if (json_end == NULL)
 		goto err0;
 
-	json_end++;
-	*json_end = '\0';
+	const size_t len = ((json_end + 1) - json_start);
+	json_end[len] = '\0';
 
-	if (json_end > json_start)
-		*ret_len = (json_end - json_start); 
-	else
-		*ret_len = 0;
-
+	*ret_len = len;
 	return json_start;
 
 err0:
