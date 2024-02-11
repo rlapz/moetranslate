@@ -867,13 +867,13 @@ static size_t
 __json_array_fills(json_value_t *values[], size_t size, json_array_t *arr)
 {
 	size_t i = 0;
-	if (arr == NULL)
-		goto clear0;
+	if (arr != NULL) {
+		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+			values[i] = e->value;
+			i++;
+		}
+	}
 
-	for (json_array_element_t *e = arr->start; e != NULL; e = e->next)
-		values[i++] = e->value;
-
-clear0:
 	for (size_t j = i; j < size; j++)
 		values[j] = NULL;
 
@@ -924,6 +924,7 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 
 		if (__json_array_fills(values, LEN(values), arr) == 0)
 			continue;
+
 
 		/* verbs, nouns, etc. */
 		str = __json_value_as_string(values[0]);
@@ -1032,23 +1033,18 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 			printf("\n" COLOR_BOLD_WHITE("%d. %c%.*s"), iter, toupper(str->string[0]),
 			       (int)str->string_size, &str->string[1]);
 
-			json_array_t *_arr = __json_value_as_array(values[3]);
-			if (_arr != NULL) {
-				_arr = __json_value_as_array(__json_array_index(_arr, 0));
-				if ((_arr != NULL) && (_arr->length > 0)) {
-					str = json_value_as_string(_arr->start->value);
-					if (str != NULL) {
-						printf(COLOR_REGULAR_GREEN(" [%.*s] "),
-						       (int)str->string_size, str->string);
-					}
-				}
+			arr = __json_value_as_array(values[3]);
+			if (arr != NULL) {
+				arr = __json_value_as_array(__json_array_index(arr, 0));
+				str = __json_value_as_string(__json_array_index(arr, 0));
+				if (str != NULL)
+					printf(COLOR_REGULAR_GREEN(" [%.*s] "), (int)str->string_size, str->string);
 			}
 
 			str = __json_value_as_string(values[2]);
 			if (str != NULL) {
 				printf("\n" COLOR_REGULAR_YELLOW("   ->") " %c%.*s.",
-				       toupper(str->string[0]), (int)str->string_size,
-				       &str->string[1]);
+				       toupper(str->string[0]), (int)str->string_size, &str->string[1]);
 			}
 
 			if (iter == CONFIG_DEF_LINES_MAX)
@@ -1191,10 +1187,8 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 	/* target: spelling */
 	json_string_t *const trg_splls_s = __json_value_as_string(splls_v[2]);
-	if (trg_splls_s != NULL) {
-		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size,
-		       trg_splls_s->string);
-	}
+	if (trg_splls_s != NULL)
+		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size, trg_splls_s->string);
 
 
 	/* synonyms */
