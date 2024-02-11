@@ -826,18 +826,58 @@ moetr_set_result_type(MoeTr *m, char type)
 }
 
 
-static json_array_element_t *
+static json_value_t *
 __json_array_index(json_array_t *arr, size_t index)
 {
-	size_t i = 0;
-	for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
-		if (i == index)
-			return e;
+	if (arr != NULL) {
+		size_t i = 0;
+		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+			if (i == index)
+				return e->value;
 
-		i++;
+			i++;
+		}
 	}
 
 	return NULL;
+}
+
+
+static json_array_t *
+__json_value_as_array(json_value_t *val)
+{
+	if (val != NULL)
+		return json_value_as_array(val);
+
+	return NULL;
+}
+
+
+static json_string_t *
+__json_value_as_string(json_value_t *val)
+{
+	if (val != NULL)
+		return json_value_as_string(val);
+
+	return NULL;
+}
+
+
+static size_t
+__json_array_fills(json_value_t *values[], size_t size, json_array_t *arr)
+{
+	size_t i = 0;
+	if (arr == NULL)
+		goto clear0;
+
+	for (json_array_element_t *e = arr->start; e != NULL; e = e->next)
+		values[i++] = e->value;
+
+clear0:
+	for (size_t j = i; j < size; j++)
+		values[j] = NULL;
+
+	return i;
 }
 
 
@@ -848,10 +888,7 @@ __moetr_print_simple(json_value_t *json)
 	if (arr == NULL)
 		return;
 
-	if (arr->length == 0)
-		return;
-
-	arr = json_value_as_array(arr->start->value);
+	arr = __json_value_as_array(__json_array_index(arr, 0));
 	if (arr == NULL)
 		return;
 
@@ -860,14 +897,11 @@ __moetr_print_simple(json_value_t *json)
 		if (arr == NULL)
 			continue;
 
-		if (arr->length == 0)
+		json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
+		if (str == NULL)
 			continue;
 
-		json_string_t *const s = json_value_as_string(arr->start->value);
-		if (s == NULL)
-			continue;
-
-		printf("%.*s", (int)s->string_size, s->string);
+		printf("%.*s", (int)str->string_size, str->string);
 	}
 
 	putchar('\n');
@@ -877,43 +911,44 @@ __moetr_print_simple(json_value_t *json)
 static void
 __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 {
+	json_array_t *arr;
+	json_string_t *str;
+	json_value_t *values[3];
+
+
 	printf("\n------------------------");
 	for (json_array_element_t *e = synonyms_a->start; e != NULL; e = e->next) {
-		int iter = 1;
-		int max  = CONFIG_SYN_LINES_MAX;
-		json_array_t *arr;
-		json_string_t *str;
-
-
 		arr = json_value_as_array(e->value);
 		if (arr == NULL)
 			continue;
 
+		if (__json_array_fills(values, LEN(values), arr) == 0)
+			continue;
+
 		/* verbs, nouns, etc. */
-		str = json_value_as_string(__json_array_index(arr, 0)->value);
-		if (str->string_size == 0) {
+		str = __json_value_as_string(values[0]);
+		if (str != NULL) {
 			/* no label */
-			printf("\n" COLOR_BOLD_BLUE("[?]"));
-		} else {
-			printf("\n" COLOR_BOLD_BLUE("[%c%.*s]"), toupper(str->string[0]),
-			       (int)str->string_size - 1, &str->string[1]);
+			if (str->string_size == 0) {
+				printf("\n" COLOR_BOLD_BLUE("[?]"));
+			} else {
+				printf("\n" COLOR_BOLD_BLUE("[%c%.*s]"), toupper(str->string[0]),
+				       (int)str->string_size - 1, &str->string[1]);
+			}
 		}
 
+
 		/* target alternative(s) */
-		arr = json_value_as_array(__json_array_index(arr, 2)->value);
+		arr = __json_value_as_array(values[2]);
 		if (arr == NULL)
 			continue;
 
+		int iter = 1;
 		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
-			json_array_t *_arr;
-			if (max == 0)
-				break;
-
-			_arr = json_value_as_array(ee->value);
-			if (_arr == NULL)
+			if (__json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
 				continue;
 
-			str = json_value_as_string(__json_array_index(_arr, 0)->value);
+			str = __json_value_as_string(values[0]);
 			if (str == NULL)
 				continue;
 
@@ -922,25 +957,29 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 			       (int)str->string_size, &str->string[1]);
 
 			/* source alternatives */
-			_arr = json_value_as_array(__json_array_index(_arr, 1)->value);
-			if (_arr == NULL)
+			arr = __json_value_as_array(values[1]);
+			if (arr == NULL)
 				continue;
 
-			int _size = ((int)_arr->length) - 1;
-			for (json_array_element_t *eee = _arr->start; eee != NULL; eee = eee->next) {
+			int _len = (int)arr->length;
+			for (json_array_element_t *eee = arr->start; eee != NULL; eee = eee->next) {
 				str = json_value_as_string(eee->value);
 				if (str == NULL)
 					continue;
 
 				printf("%.*s", (int)str->string_size, str->string);
-				if (_size > 0) {
+
+				if (_len-- > 1)
 					printf(", ");
-					_size--;
-				}
 			}
 
+			if (_len == 0)
+				printf(".");
+
+			if (iter == CONFIG_SYN_LINES_MAX)
+				break;
+
 			iter++;
-			max--;
 		}
 		putchar('\n');
 	}
@@ -951,75 +990,72 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 static void
 __moetr_print_detail_defs(const json_array_t *defs_a)
 {
+	json_array_t *arr;
+	json_string_t *str;
+	json_value_t *values[4];
+
+
 	printf("\n------------------------");
 	for (json_array_element_t *e = defs_a->start; e != NULL; e = e->next) {
-		int iter = 1;
-		int max = CONFIG_DEF_LINES_MAX;
-		json_array_t *arr;
-		json_string_t *str;
-
-
 		arr = json_value_as_array(e->value);
 		if (arr == NULL)
 			continue;
 
+		if (__json_array_fills(values, LEN(values), arr) == 0)
+			continue;
+
 		/* verbs, nouns, etc. */
-		str = json_value_as_string(__json_array_index(arr, 0)->value);
-		if (str->string_size == 0) {
+		str = __json_value_as_string(values[0]);
+		if (str != NULL) {
 			/* no label */
-			printf("\n" COLOR_BOLD_YELLOW("[?]"));
-		} else {
-			printf("\n" COLOR_BOLD_YELLOW("[%c%.*s]"), toupper(str->string[0]),
-			       (int)str->string_size - 1, &str->string[1]);
+			if (str->string_size == 0) {
+				printf("\n" COLOR_BOLD_YELLOW("[?]"));
+			} else {
+				printf("\n" COLOR_BOLD_YELLOW("[%c%.*s]"), toupper(str->string[0]),
+				       (int)str->string_size - 1, &str->string[1]);
+			}
 		}
 
-		arr = json_value_as_array(__json_array_index(arr, 1)->value);
+		arr = __json_value_as_array(values[1]);
 		if (arr == NULL)
 			continue;
 
+		int iter = 1;
 		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
-			json_array_t *_arr, *__arr;
-			if (max == 0)
-				break;
-
-			_arr = json_value_as_array(ee->value);
-			if (_arr == NULL)
+			if (__json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
 				continue;
 
-			str = json_value_as_string(__json_array_index(_arr, 0)->value);
+			str = __json_value_as_string(values[0]);
 			if (str == NULL)
 				continue;
 
 			printf("\n" COLOR_BOLD_WHITE("%d. %c%.*s"), iter, toupper(str->string[0]),
 			       (int)str->string_size, &str->string[1]);
 
-			if (_arr->length > 3) {
-				__arr = json_value_as_array(__json_array_index(_arr, 3)->value);
-				if (__arr != NULL) {
-					__arr = json_value_as_array(__arr->start->value);
-					if (__arr != NULL) {
-						str = json_value_as_string(__arr->start->value);
-						if (str != NULL) {
-							printf(COLOR_REGULAR_GREEN(" [%.*s] "),
-							       (int)str->string_size, str->string);
-						}
+			json_array_t *_arr = __json_value_as_array(values[3]);
+			if (_arr != NULL) {
+				_arr = __json_value_as_array(__json_array_index(_arr, 0));
+				if ((_arr != NULL) && (_arr->length > 0)) {
+					str = json_value_as_string(_arr->start->value);
+					if (str != NULL) {
+						printf(COLOR_REGULAR_GREEN(" [%.*s] "),
+						       (int)str->string_size, str->string);
 					}
 				}
 			}
 
-			if (_arr->length > 2) {
-				str = json_value_as_string(__json_array_index(_arr, 2)->value);
-				if (str != NULL) {
-					printf("\n" COLOR_REGULAR_YELLOW("   ->") " %c%.*s ",
-					       toupper(str->string[0]), (int)str->string_size,
-					       &str->string[1]);
-				}
+			str = __json_value_as_string(values[2]);
+			if (str != NULL) {
+				printf("\n" COLOR_REGULAR_YELLOW("   ->") " %c%.*s.",
+				       toupper(str->string[0]), (int)str->string_size,
+				       &str->string[1]);
 			}
 
-			iter++;
-			max--;
-		}
+			if (iter == CONFIG_DEF_LINES_MAX)
+				break;
 
+			iter++;
+		}
 		putchar('\n');
 	}
 	putchar('\n');
@@ -1029,42 +1065,41 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 static void
 __moetr_print_detail_examples(json_array_t *examples_a)
 {
-	printf("\n------------------------\n");
-
-	int iter = 1;
-	int max = CONFIG_EXM_LINES_MAX;
 	char buffer[CONFIG_EXM_BUFFER_SIZE];
+
+
+	printf("\n------------------------\n");
 	for (json_array_element_t *e = examples_a->start; e != NULL; e = e->next) {
 		json_array_t *arr = json_value_as_array(e->value);
 		if (arr == NULL)
 			continue;
 
+		int iter = 1;
 		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
-			if (max == 0)
-				break;
-
 			arr = json_value_as_array(ee->value);
 			if (arr == NULL)
 				continue;
 
-			json_string_t *const str = json_value_as_string(arr->start->value);
+			json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
 			if (str == NULL)
 				continue;
 
-			if (str->string_size >= sizeof(buffer))
+			const size_t len = str->string_size;
+			if (len >= sizeof(buffer))
 				continue;
 
-			const size_t len = str->string_size;
 			memcpy(buffer, str->string, len);
 			buffer[len] = '\0';
 
 			char *const res = cstr_skip_html_tags(buffer, len);
 			res[0] = toupper(res[0]);
 
-			printf("%d. " COLOR_REGULAR_YELLOW("%s") "\n", iter, res);
+			printf("%d. " COLOR_REGULAR_YELLOW("%s.") "\n", iter, res);
+
+			if (iter == CONFIG_EXM_LINES_MAX)
+				break;
 
 			iter++;
-			max--;
 		}
 
 		putchar('\n');
@@ -1076,43 +1111,37 @@ static void
 __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 {
 	json_array_t *const root_a = json_value_as_array(json);
-	if ((root_a == NULL) || root_a->length == 0)
+	if (root_a == NULL)
+		return;
+
+	json_value_t *root_v[14];
+	if (__json_array_fills(root_v, LEN(root_v), root_a) == 0)
 		return;
 
 
+	/* bufferred print */
 	char buffer[CONFIG_PRINT_BUFFER_SIZE];
 	const int buffer_set = setvbuf(stdout, buffer, _IOFBF, CONFIG_PRINT_BUFFER_SIZE);
+	/* bufferred print */
 
 
-	json_array_t *const text_a = json_value_as_array(__json_array_index(root_a, 0)->value);
-	json_array_t *const examples_a = json_value_as_array(__json_array_index(root_a,  13)->value);
-	json_array_t *const defs_a = json_value_as_array(__json_array_index(root_a, 12)->value);
+	json_array_t *const text_a = __json_value_as_array(root_v[0]);
+	json_value_t *splls_v[4];
+
 
 	json_array_t *splls_a = NULL;
-	if (text_a != NULL)
-		splls_a = json_value_as_array(__json_array_index(text_a, text_a->length - 1)->value);
+	if (text_a->length > 1)
+		splls_a = __json_value_as_array(__json_array_index(text_a, (text_a->length - 1)));
 
-	json_string_t *src_splls_s = NULL;
-	json_string_t *trg_splls_s = NULL;
-	if (splls_a != NULL) {
-		if (splls_a->length > 3)
-			src_splls_s = json_value_as_string(__json_array_index(splls_a, 3)->value);
-
-		trg_splls_s = json_value_as_string(__json_array_index(splls_a, 2)->value);
-	}
-
-	json_array_t *const src_cor_a = json_value_as_array(__json_array_index(root_a, 7)->value);
-	json_string_t *const src_lang_s = json_value_as_string(__json_array_index(root_a, 2)->value);
-	json_array_t *const synonyms_a = json_value_as_array(__json_array_index(root_a, 1)->value);
+	__json_array_fills(splls_v, LEN(splls_v), splls_a);
 
 
 	/* source: correction */
-	if (src_cor_a != NULL && src_cor_a->length > 1) {
-		json_string_t *const str = json_value_as_string(src_cor_a->start->next->value);
-		if (str != NULL) {
-			printf(COLOR_BOLD_GREEN("Did you mean: ") "\"%.*s\" "
-			       COLOR_BOLD_GREEN("?") "\n\n", (int)str->string_size, str->string);
-		}
+	json_array_t *const src_cor_a = __json_value_as_array(root_v[7]);
+	json_string_t *const src_cor_s = __json_value_as_string(__json_array_index(src_cor_a, 1));
+	if (src_cor_s != NULL) {
+		printf(COLOR_BOLD_GREEN("Did you mean: ") "\"%.*s\" " COLOR_BOLD_GREEN("?") "\n\n",
+		       (int)src_cor_s->string_size, src_cor_s->string);
 	}
 
 
@@ -1121,6 +1150,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* source: spelling */
+	json_string_t *const src_splls_s = __json_value_as_string(splls_v[3]);
 	if (src_splls_s != NULL) {
 		printf("(" COLOR_REGULAR_GREEN("%.*s") ")\n", (int)src_splls_s->string_size,
 		       src_splls_s->string);
@@ -1128,6 +1158,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* source: language */
+	json_string_t *const src_lang_s = __json_value_as_string(root_v[2]);
 	if ((src_lang_s != NULL) && (strcasecmp("auto", m->langs[0]->key) == 0)) {
 		const Lang *lang = NULL;
 		const char *lang_val = "Unknown";
@@ -1147,14 +1178,11 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 			if (arr == NULL)
 				continue;
 
-			if (arr->length == 0)
+			json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
+			if (str == NULL)
 				continue;
 
-			json_string_t *const s = json_value_as_string(arr->start->value);
-			if (s == NULL)
-				continue;
-
-			printf("%.*s", (int)s->string_size, s->string);
+			printf("%.*s", (int)str->string_size, str->string);
 		}
 
 		putchar('\n');
@@ -1162,6 +1190,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* target: spelling */
+	json_string_t *const trg_splls_s = __json_value_as_string(splls_v[2]);
 	if (trg_splls_s != NULL) {
 		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size,
 		       trg_splls_s->string);
@@ -1169,24 +1198,29 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* synonyms */
+	json_array_t *const synonyms_a = __json_value_as_array(root_v[1]);
 	if ((synonyms_a != NULL) && (CONFIG_SYN_LINES_MAX != 0))
 		__moetr_print_detail_synonyms(synonyms_a);
 
 
 	/* definitions */
+	json_array_t *const defs_a = __json_value_as_array(root_v[12]);
 	if ((defs_a != NULL) && (CONFIG_DEF_LINES_MAX != 0))
 		__moetr_print_detail_defs(defs_a);
 
 
 	/* examples */
+	json_array_t *const examples_a = __json_value_as_array(root_v[13]);
 	if ((examples_a != NULL) && (CONFIG_EXM_LINES_MAX != 0))
 		__moetr_print_detail_examples(examples_a);
 
 
+	/* bufferred print */
 	if (buffer_set == 0) {
 		fflush(stdout);
 		setvbuf(stdout, NULL, _IOLBF, 0);
 	}
+	/* bufferred print */
 }
 
 
@@ -1197,10 +1231,7 @@ __moetr_print_detect_lang(json_value_t *json)
 	if (arr == NULL)
 		return;
 
-	if (arr->length < 3)
-		return;
-
-	json_string_t *const str = json_value_as_string(arr->start->next->next->value);
+	json_string_t *const str = __json_value_as_string(__json_array_index(arr, 2));
 	if (str == NULL)
 		return;
 
