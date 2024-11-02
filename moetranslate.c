@@ -33,7 +33,7 @@
 #if (CONFIG_COLOR_ENABLED != 0)
 	#define COLOR_REGULAR_GREEN(X)  "\033[00;" CONFIG_COLOR_GREEN  "m" X "\033[00m"
 	#define COLOR_REGULAR_YELLOW(X) "\033[00;" CONFIG_COLOR_YELLOW "m" X "\033[00m"
-	
+
 	#define COLOR_BOLD_BLUE(X)      "\033[01;" CONFIG_COLOR_BLUE   "m" X "\033[00m"
 	#define COLOR_BOLD_GREEN(X)     "\033[01;" CONFIG_COLOR_GREEN  "m" X "\033[00m"
 	#define COLOR_BOLD_WHITE(X)     "\033[01;" CONFIG_COLOR_WHITE  "m" X "\033[00m"
@@ -41,7 +41,7 @@
 #else
 	#define COLOR_REGULAR_GREEN(X)  X
 	#define COLOR_REGULAR_YELLOW(X) X
-	
+
 	#define COLOR_BOLD_BLUE(X)      X
 	#define COLOR_BOLD_GREEN(X)     X
 	#define COLOR_BOLD_WHITE(X)     X
@@ -189,7 +189,7 @@ typedef struct {
 static int  moetr_init(MoeTr *m, char default_result_type, const Lang *default_langs[2]);
 static void moetr_deinit(MoeTr *m);
 static int  moetr_set_langs(MoeTr *m, const char keys[]);
-static int  moetr_set_result_type(MoeTr *m, char type);
+static int  moetr_set_result_type(MoeTr *m, int type);
 static int  moetr_translate(MoeTr *m, const char text[]);
 static void moetr_interactive(MoeTr *m, const char text[]);
 
@@ -805,9 +805,9 @@ moetr_set_langs(MoeTr *m, const char keys[])
 
 
 static int
-moetr_set_result_type(MoeTr *m, char type)
+moetr_set_result_type(MoeTr *m, int type)
 {
-	switch (tolower(type)) {
+	switch (type) {
 	case 's':
 		m->result_type = RESULT_TYPE_SIMPLE;
 		break;
@@ -1499,17 +1499,17 @@ main(int argc, char *argv[])
 	while ((opt = getopt(argc, argv, "s:d:l:iLh")) != -1) {
 		switch (opt) {
 		case 's':
-			moetr_set_result_type(&moe, 's');
+			moetr_set_result_type(&moe, opt);
 			if (moetr_set_langs(&moe, cstr_trim_left_mut(argv[optind - 1])) < 0)
 				goto out0;
 			break;
 		case 'd':
-			moetr_set_result_type(&moe, 'd');
+			moetr_set_result_type(&moe, opt);
 			if (moetr_set_langs(&moe, cstr_trim_left_mut(argv[optind - 1])) < 0)
 				goto out0;
 			break;
 		case 'l':
-			moetr_set_result_type(&moe, 'l');
+			moetr_set_result_type(&moe, opt);
 			is_detect_lang = 1;
 			break;
 		case 'i':
