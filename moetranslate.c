@@ -402,7 +402,7 @@ lang_get_from_key_s(const char key[], size_t len, const Lang **lang)
 {
 	char buffer[CONFIG_LANG_KEY_SIZE + 1u];
 	if (len == 0)
-		return 0;
+		return -1;
 
 	if (len <= sizeof(buffer)) {
 		memcpy(buffer, key, len);
