@@ -66,7 +66,7 @@
 #define CONFIG_HTTP_PATH_SIMPLE "&oe=UTF-8&dt=t"
 #define CONFIG_HTTP_PATH_DETAIL "&oe=UTF-8&dt=bd&dt=ex&dt=ld&dt=md&dt=rw&dt=rm&dt=ss"\
 				"&dt=t&dt=at&dt=gt&dt=qca"
-#define CONFIG_HTTP_PATH_LANG   "&dt=t&sl=auto"
+#define CONFIG_HTTP_PATH_LANG   "&dt=t&sl=auto&tl=en"
 
 #define CONFIG_HTTP_QUERY_SL  "&sl="
 #define CONFIG_HTTP_QUERY_TL  "&tl="
