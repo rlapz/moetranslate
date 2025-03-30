@@ -2,7 +2,7 @@
 #
 # moetranslate - Simple language translator written in C
 #
-# Copyright (c) 2024 Arthur Lapz (rLapz)
+# Copyright (c) 2025 Arthur Lapz (rLapz)
 #
 # See LICENSE file for license details
 
