@@ -67,14 +67,14 @@ typedef struct {
 	size_t  size;
 } Buffer;
 
-static int   buffer_init(Buffer *b, size_t size);
-static void  buffer_deinit(Buffer *b);
+static int  buffer_init(Buffer *b, size_t size);
+static void buffer_deinit(Buffer *b);
 
 /* ret: -1 -> failed to realloc
  *       0 -> no realloc
  *       1 -> realloc
  */
-static int   buffer_check(Buffer *s, size_t len);
+static int buffer_check(Buffer *s, size_t len);
 
 
 /*
@@ -97,7 +97,7 @@ static int         lang_get_from_key_s(const char key[], size_t len, const Lang 
  *       example:
  *           en:    -> source = en, but the target is empty
  *             :id  -> target = id, but the source is empty
- *             :    -> both empty
+ *             :    -> both are empty
  *
  * return:  0 = sucess
  *         -1 = invalid keys format
@@ -105,7 +105,7 @@ static int         lang_get_from_key_s(const char key[], size_t len, const Lang 
  *         -3 = invalid target lang
  *         -4 = both are invalid
  */
-static int         lang_parse(const Lang *l[2], const char keys[]);
+static int lang_parse(const Lang *l[2], const char keys[]);
 
 
 /*
@@ -145,12 +145,24 @@ typedef struct {
 	struct iovec iovs[HTTP_IOVS_SIZE];
 } Http;
 
-static int   http_init(Http *h);
-static void  http_deinit(Http *h);
-static int   http_request(Http *h, int type, const char sl[], const char tl[],
-			  const char hl[], const char text[]);
+static int         http_init(Http *h);
+static void        http_deinit(Http *h);
+static const char *http_url_encode(Http *h, const char plain[]);
+static int         http_request(Http *h, int type, const char sl[], const char tl[],
+							    const char hl[], const char text[]);
+static void        http_build_request(Http *h, int type, const char sl[], const char tl[],
+									  const char hl[], const char text[], size_t text_len);
 /* Don't free() the returned memory! */
 static char *http_response_get_json(Http *h, size_t *ret_len);
+
+
+/*
+ * Json
+ */
+static json_value_t  *json_array_index(json_array_t *arr, size_t index);
+static json_array_t  *json_value_as_array_wrp(json_value_t *val);
+static json_string_t *json_value_as_string_wrp(json_value_t *val);
+static size_t         json_array_fills(json_value_t *values[], size_t size, json_array_t *arr);
 
 
 /*
@@ -176,7 +188,7 @@ enum {
 	MOETR_INTR_CODE_LANG_LIST,
 	MOETR_INTR_CODE_HELP,
 	MOETR_INTR_CODE_QUIT,
-	MOETR_INTR_CODE_ERROR,
+	MOETR_INTR_CODE_INVAL,
 };
 
 typedef struct {
@@ -190,8 +202,20 @@ static int  moetr_init(MoeTr *m, char default_result_type, const Lang *default_l
 static void moetr_deinit(MoeTr *m);
 static int  moetr_set_langs(MoeTr *m, const char keys[]);
 static int  moetr_set_result_type(MoeTr *m, int type);
+static void moetr_print_simple(json_value_t *json);
+static void moetr_print_detail_synonyms(const json_array_t *synonyms_a);
+static void moetr_print_detail_defs(const json_array_t *defs_a);
+static void moetr_print_detail_examples(json_array_t *examples_a);
+static void moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[]);
+static void moetr_print_detect_lang(json_value_t *json);
 static int  moetr_translate(MoeTr *m, const char text[]);
+static void moetr_interactive_banner(const MoeTr *m);
+static void moetr_interactive_help(void);
+static int  moetr_interactive_parse(char *cmd[]);
+static void moetr_set_prompt(MoeTr *m);
 static void moetr_interactive(MoeTr *m, const char text[]);
+static void moetr_help(const char name[]);
+static void moetr_load_default_opts(char *type, const Lang *langs[2]);
 
 
 /********************************************************************************
@@ -542,7 +566,7 @@ http_deinit(Http *h)
 
 
 static const char *
-__http_url_encode(Http *h, const char plain[])
+http_url_encode(Http *h, const char plain[])
 {
 	const size_t plain_len = strlen(plain);
 	if (plain_len == 0)
@@ -578,10 +602,9 @@ __http_url_encode(Http *h, const char plain[])
 
 
 static void
-__http_build_request(Http *h, int type, const char sl[], const char tl[], const char hl[],
+http_build_request(Http *h, int type, const char sl[], const char tl[], const char hl[],
 		     const char text[], size_t text_len)
 {
-	/* HEHE... :D */
 	/*
 	 * iovs[0]  = METHOD
 	 * iovs[1]  = path base
@@ -651,7 +674,7 @@ __http_build_request(Http *h, int type, const char sl[], const char tl[], const 
 static int
 http_request(Http *h, int type, const char sl[], const char tl[], const char hl[], const char text[])
 {
-	const char *const text_enc = __http_url_encode(h, text);
+	const char *const text_enc = http_url_encode(h, text);
 	if (text_enc == NULL)
 		return -1;
 
@@ -659,7 +682,7 @@ http_request(Http *h, int type, const char sl[], const char tl[], const char hl[
 	if (fd < 0)
 		return -1;
 
-	__http_build_request(h, type, sl, tl, hl, text_enc, h->buffer_len);
+	http_build_request(h, type, sl, tl, hl, text_enc, h->buffer_len);
 
 	const ssize_t written = writev(fd, h->iovs, HTTP_IOVS_SIZE);
 	if (written < 0) {
@@ -754,6 +777,65 @@ err0:
 }
 
 
+
+/*
+ * Json
+ */
+static json_value_t *
+json_array_index(json_array_t *arr, size_t index)
+{
+	if (arr != NULL) {
+		size_t i = 0;
+		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+			if (i == index)
+				return e->value;
+
+			i++;
+		}
+	}
+
+	return NULL;
+}
+
+
+static json_array_t *
+json_value_as_array_wrp(json_value_t *val)
+{
+	if (val != NULL)
+		return json_value_as_array(val);
+
+	return NULL;
+}
+
+
+static json_string_t *
+json_value_as_string_wrp(json_value_t *val)
+{
+	if (val != NULL)
+		return json_value_as_string(val);
+
+	return NULL;
+}
+
+
+static size_t
+json_array_fills(json_value_t *values[], size_t size, json_array_t *arr)
+{
+	size_t i = 0;
+	if (arr != NULL) {
+		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
+			values[i] = e->value;
+			i++;
+		}
+	}
+
+	for (size_t j = i; j < size; j++)
+		values[j] = NULL;
+
+	return i;
+}
+
+
 /*
  * MoeTr
  */
@@ -826,69 +908,14 @@ moetr_set_result_type(MoeTr *m, int type)
 }
 
 
-static json_value_t *
-__json_array_index(json_array_t *arr, size_t index)
-{
-	if (arr != NULL) {
-		size_t i = 0;
-		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
-			if (i == index)
-				return e->value;
-
-			i++;
-		}
-	}
-
-	return NULL;
-}
-
-
-static json_array_t *
-__json_value_as_array(json_value_t *val)
-{
-	if (val != NULL)
-		return json_value_as_array(val);
-
-	return NULL;
-}
-
-
-static json_string_t *
-__json_value_as_string(json_value_t *val)
-{
-	if (val != NULL)
-		return json_value_as_string(val);
-
-	return NULL;
-}
-
-
-static size_t
-__json_array_fills(json_value_t *values[], size_t size, json_array_t *arr)
-{
-	size_t i = 0;
-	if (arr != NULL) {
-		for (json_array_element_t *e = arr->start; e != NULL; e = e->next) {
-			values[i] = e->value;
-			i++;
-		}
-	}
-
-	for (size_t j = i; j < size; j++)
-		values[j] = NULL;
-
-	return i;
-}
-
-
 static void
-__moetr_print_simple(json_value_t *json)
+moetr_print_simple(json_value_t *json)
 {
 	json_array_t *arr = json_value_as_array(json);
 	if (arr == NULL)
 		return;
 
-	arr = __json_value_as_array(__json_array_index(arr, 0));
+	arr = json_value_as_array_wrp(json_array_index(arr, 0));
 	if (arr == NULL)
 		return;
 
@@ -897,7 +924,7 @@ __moetr_print_simple(json_value_t *json)
 		if (arr == NULL)
 			continue;
 
-		json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
+		json_string_t *const str = json_value_as_string_wrp(json_array_index(arr, 0));
 		if (str == NULL)
 			continue;
 
@@ -909,7 +936,7 @@ __moetr_print_simple(json_value_t *json)
 
 
 static void
-__moetr_print_detail_synonyms(const json_array_t *synonyms_a)
+moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 {
 	json_array_t *arr;
 	json_string_t *str;
@@ -922,12 +949,12 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 		if (arr == NULL)
 			continue;
 
-		if (__json_array_fills(values, LEN(values), arr) == 0)
+		if (json_array_fills(values, LEN(values), arr) == 0)
 			continue;
 
 
 		/* verbs, nouns, etc. */
-		str = __json_value_as_string(values[0]);
+		str = json_value_as_string_wrp(values[0]);
 		if (str != NULL) {
 			/* no label */
 			if (str->string_size == 0) {
@@ -940,16 +967,16 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 
 
 		/* target alternative(s) */
-		arr = __json_value_as_array(values[2]);
+		arr = json_value_as_array_wrp(values[2]);
 		if (arr == NULL)
 			continue;
 
 		int iter = 1;
 		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
-			if (__json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
+			if (json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
 				continue;
 
-			str = __json_value_as_string(values[0]);
+			str = json_value_as_string_wrp(values[0]);
 			if (str == NULL)
 				continue;
 
@@ -958,7 +985,7 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 			       (int)str->string_size, &str->string[1]);
 
 			/* source alternatives */
-			arr = __json_value_as_array(values[1]);
+			arr = json_value_as_array_wrp(values[1]);
 			if (arr == NULL)
 				continue;
 
@@ -989,7 +1016,7 @@ __moetr_print_detail_synonyms(const json_array_t *synonyms_a)
 
 
 static void
-__moetr_print_detail_defs(const json_array_t *defs_a)
+moetr_print_detail_defs(const json_array_t *defs_a)
 {
 	json_array_t *arr;
 	json_string_t *str;
@@ -1002,11 +1029,11 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 		if (arr == NULL)
 			continue;
 
-		if (__json_array_fills(values, LEN(values), arr) == 0)
+		if (json_array_fills(values, LEN(values), arr) == 0)
 			continue;
 
 		/* verbs, nouns, etc. */
-		str = __json_value_as_string(values[0]);
+		str = json_value_as_string_wrp(values[0]);
 		if (str != NULL) {
 			/* no label */
 			if (str->string_size == 0) {
@@ -1017,31 +1044,31 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 			}
 		}
 
-		arr = __json_value_as_array(values[1]);
+		arr = json_value_as_array_wrp(values[1]);
 		if (arr == NULL)
 			continue;
 
 		int iter = 1;
 		for (json_array_element_t *ee = arr->start; ee != NULL; ee = ee->next) {
-			if (__json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
+			if (json_array_fills(values, LEN(values), json_value_as_array(ee->value)) == 0)
 				continue;
 
-			str = __json_value_as_string(values[0]);
+			str = json_value_as_string_wrp(values[0]);
 			if (str == NULL)
 				continue;
 
 			printf("\n" COLOR_BOLD_WHITE("%d. %c%.*s"), iter, toupper(str->string[0]),
 			       (int)str->string_size, &str->string[1]);
 
-			arr = __json_value_as_array(values[3]);
+			arr = json_value_as_array_wrp(values[3]);
 			if (arr != NULL) {
-				arr = __json_value_as_array(__json_array_index(arr, 0));
-				str = __json_value_as_string(__json_array_index(arr, 0));
+				arr = json_value_as_array_wrp(json_array_index(arr, 0));
+				str = json_value_as_string_wrp(json_array_index(arr, 0));
 				if (str != NULL)
 					printf(COLOR_REGULAR_GREEN(" [%.*s] "), (int)str->string_size, str->string);
 			}
 
-			str = __json_value_as_string(values[2]);
+			str = json_value_as_string_wrp(values[2]);
 			if (str != NULL) {
 				printf("\n" COLOR_REGULAR_YELLOW("   ->") " %c%.*s.",
 				       toupper(str->string[0]), (int)str->string_size, &str->string[1]);
@@ -1059,7 +1086,7 @@ __moetr_print_detail_defs(const json_array_t *defs_a)
 
 
 static void
-__moetr_print_detail_examples(json_array_t *examples_a)
+moetr_print_detail_examples(json_array_t *examples_a)
 {
 	char buffer[CONFIG_EXM_BUFFER_SIZE];
 
@@ -1076,7 +1103,7 @@ __moetr_print_detail_examples(json_array_t *examples_a)
 			if (arr == NULL)
 				continue;
 
-			json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
+			json_string_t *const str = json_value_as_string_wrp(json_array_index(arr, 0));
 			if (str == NULL)
 				continue;
 
@@ -1104,14 +1131,14 @@ __moetr_print_detail_examples(json_array_t *examples_a)
 
 
 static void
-__moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
+moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 {
 	json_array_t *const root_a = json_value_as_array(json);
 	if (root_a == NULL)
 		return;
 
 	json_value_t *root_v[14];
-	if (__json_array_fills(root_v, LEN(root_v), root_a) == 0)
+	if (json_array_fills(root_v, LEN(root_v), root_a) == 0)
 		return;
 
 
@@ -1121,20 +1148,20 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 	/* bufferred print */
 
 
-	json_array_t *const text_a = __json_value_as_array(root_v[0]);
+	json_array_t *const text_a = json_value_as_array_wrp(root_v[0]);
 	json_value_t *splls_v[4];
 
 
 	json_array_t *splls_a = NULL;
 	if (text_a->length > 1)
-		splls_a = __json_value_as_array(__json_array_index(text_a, (text_a->length - 1)));
+		splls_a = json_value_as_array_wrp(json_array_index(text_a, (text_a->length - 1)));
 
-	__json_array_fills(splls_v, LEN(splls_v), splls_a);
+	json_array_fills(splls_v, LEN(splls_v), splls_a);
 
 
 	/* source: correction */
-	json_array_t *const src_cor_a = __json_value_as_array(root_v[7]);
-	json_string_t *const src_cor_s = __json_value_as_string(__json_array_index(src_cor_a, 1));
+	json_array_t *const src_cor_a = json_value_as_array_wrp(root_v[7]);
+	json_string_t *const src_cor_s = json_value_as_string_wrp(json_array_index(src_cor_a, 1));
 	if (src_cor_s != NULL) {
 		printf(COLOR_BOLD_GREEN("Did you mean: ") "\"%.*s\" " COLOR_BOLD_GREEN("?") "\n\n",
 		       (int)src_cor_s->string_size, src_cor_s->string);
@@ -1146,7 +1173,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* source: spelling */
-	json_string_t *const src_splls_s = __json_value_as_string(splls_v[3]);
+	json_string_t *const src_splls_s = json_value_as_string_wrp(splls_v[3]);
 	if (src_splls_s != NULL) {
 		printf("(" COLOR_REGULAR_GREEN("%.*s") ")\n", (int)src_splls_s->string_size,
 		       src_splls_s->string);
@@ -1154,7 +1181,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* source: language */
-	json_string_t *const src_lang_s = __json_value_as_string(root_v[2]);
+	json_string_t *const src_lang_s = json_value_as_string_wrp(root_v[2]);
 	if ((src_lang_s != NULL) && (strcasecmp("auto", m->langs[0]->key) == 0)) {
 		const Lang *lang = NULL;
 		const char *lang_val = "Unknown";
@@ -1174,7 +1201,7 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 			if (arr == NULL)
 				continue;
 
-			json_string_t *const str = __json_value_as_string(__json_array_index(arr, 0));
+			json_string_t *const str = json_value_as_string_wrp(json_array_index(arr, 0));
 			if (str == NULL)
 				continue;
 
@@ -1186,27 +1213,27 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 	/* target: spelling */
-	json_string_t *const trg_splls_s = __json_value_as_string(splls_v[2]);
+	json_string_t *const trg_splls_s = json_value_as_string_wrp(splls_v[2]);
 	if (trg_splls_s != NULL)
 		printf("( " COLOR_REGULAR_GREEN("%.*s") " )\n", (int)trg_splls_s->string_size, trg_splls_s->string);
 
 
 	/* synonyms */
-	json_array_t *const synonyms_a = __json_value_as_array(root_v[1]);
+	json_array_t *const synonyms_a = json_value_as_array_wrp(root_v[1]);
 	if ((synonyms_a != NULL) && (CONFIG_SYN_LINES_MAX != 0))
-		__moetr_print_detail_synonyms(synonyms_a);
+		moetr_print_detail_synonyms(synonyms_a);
 
 
 	/* definitions */
-	json_array_t *const defs_a = __json_value_as_array(root_v[12]);
+	json_array_t *const defs_a = json_value_as_array_wrp(root_v[12]);
 	if ((defs_a != NULL) && (CONFIG_DEF_LINES_MAX != 0))
-		__moetr_print_detail_defs(defs_a);
+		moetr_print_detail_defs(defs_a);
 
 
 	/* examples */
-	json_array_t *const examples_a = __json_value_as_array(root_v[13]);
+	json_array_t *const examples_a = json_value_as_array_wrp(root_v[13]);
 	if ((examples_a != NULL) && (CONFIG_EXM_LINES_MAX != 0))
-		__moetr_print_detail_examples(examples_a);
+		moetr_print_detail_examples(examples_a);
 
 
 	/* bufferred print */
@@ -1219,13 +1246,13 @@ __moetr_print_detail(const MoeTr *m, json_value_t *json, const char src_text[])
 
 
 static void
-__moetr_print_detect_lang(json_value_t *json)
+moetr_print_detect_lang(json_value_t *json)
 {
 	json_array_t *const arr = json_value_as_array(json);
 	if (arr == NULL)
 		return;
 
-	json_string_t *const str = __json_value_as_string(__json_array_index(arr, 2));
+	json_string_t *const str = json_value_as_string_wrp(json_array_index(arr, 2));
 	if (str == NULL)
 		return;
 
@@ -1259,13 +1286,13 @@ moetr_translate(MoeTr *m, const char text[])
 
 	switch (m->result_type) {
 	case RESULT_TYPE_SIMPLE:
-		__moetr_print_simple(json);
+		moetr_print_simple(json);
 		break;
 	case RESULT_TYPE_DETAIL:
-		__moetr_print_detail(m, json, text);
+		moetr_print_detail(m, json, text);
 		break;
 	case RESULT_TYPE_LANG:
-		__moetr_print_detect_lang(json);
+		moetr_print_detect_lang(json);
 		break;
 	}
 
@@ -1275,7 +1302,7 @@ moetr_translate(MoeTr *m, const char text[])
 
 
 static void
-__moetr_interactive_banner(const MoeTr *m)
+moetr_interactive_banner(const MoeTr *m)
 {
 	printf(COLOR_BOLD_WHITE("---[ Moetranslate ]---") "\n"
 	       COLOR_BOLD_GREEN("Languages:         ") "%s (%s) -> %s (%s)\n"
@@ -1287,7 +1314,7 @@ __moetr_interactive_banner(const MoeTr *m)
 
 
 static void
-__moetr_interactive_help(void)
+moetr_interactive_help(void)
 {
 	printf(COLOR_BOLD_GREEN("Change languages: ") COLOR_REGULAR_YELLOW("/c") " [SOURCE]:[TARGET]\n"
 	       COLOR_BOLD_GREEN("Result type:      ") COLOR_REGULAR_YELLOW("/r") " [TYPE]\n"
@@ -1306,7 +1333,7 @@ __moetr_interactive_help(void)
 
 
 static int
-__moetr_interactive_parse(char *cmd[])
+moetr_interactive_parse(char *cmd[])
 {
 	char *_cmd = *cmd;
 	if (*_cmd == '\0')
@@ -1348,12 +1375,12 @@ __moetr_interactive_parse(char *cmd[])
 		return MOETR_INTR_CODE_QUIT;
 	}
 
-	return MOETR_INTR_CODE_ERROR;
+	return MOETR_INTR_CODE_INVAL;
 }
 
 
 static void
-__moetr_set_prompt(MoeTr *m)
+moetr_set_prompt(MoeTr *m)
 {
 	snprintf(m->prompt, sizeof(m->prompt), COLOR_BOLD_WHITE("[%s:%s][%s]->") " ",
 		 m->langs[0]->key, m->langs[1]->key, result_type_str[m->result_type][0]);
@@ -1365,8 +1392,8 @@ moetr_interactive(MoeTr *m, const char text[])
 {
 	setlocale(LC_CTYPE, "");
 	stifle_history(CONFIG_INTERACTIVE_HISTORY_SIZE);
-	__moetr_set_prompt(m);
-	__moetr_interactive_banner(m);
+	moetr_set_prompt(m);
+	moetr_interactive_banner(m);
 
 	if (text != NULL)
 		moetr_translate(m, text);
@@ -1378,7 +1405,7 @@ moetr_interactive(MoeTr *m, const char text[])
 			return;
 
 		char *cmd = cstr_trim_right_mut(cstr_trim_left_mut(res));
-		switch (__moetr_interactive_parse(&cmd)) {
+		switch (moetr_interactive_parse(&cmd)) {
 		case MOETR_INTR_CODE_TRANSLATE:
 			puts("------------------------");
 			moetr_translate(m, cmd);
@@ -1386,13 +1413,13 @@ moetr_interactive(MoeTr *m, const char text[])
 			break;
 		case MOETR_INTR_CODE_CHANGE_LANGS:
 			if (moetr_set_langs(m, cmd) == 0)
-				__moetr_set_prompt(m);
+				moetr_set_prompt(m);
 
 			cmd = res;
 			break;
 		case MOETR_INTR_CODE_CHANGE_RESTYPE:
 			if (moetr_set_result_type(m, *cmd) == 0)
-				__moetr_set_prompt(m);
+				moetr_set_prompt(m);
 
 			cmd = res;
 			break;
@@ -1403,14 +1430,14 @@ moetr_interactive(MoeTr *m, const char text[])
 			cmd = res;
 			break;
 		case MOETR_INTR_CODE_HELP:
-			__moetr_interactive_help();
+			moetr_interactive_help();
 			break;
 		case MOETR_INTR_CODE_QUIT:
 			is_alive = 0;
 			break;
-		case MOETR_INTR_CODE_ERROR:
 		default:
 			puts("Invalid command!");
+			break;
 		}
 
 		if (*cmd != '\0')
@@ -1425,7 +1452,7 @@ moetr_interactive(MoeTr *m, const char text[])
  * Main
  */
 static void
-__help(const char name[])
+moetr_help(const char name[])
 {
 	printf("%s - A simple language translator\n\n"
 		"Usage: moetranslate -[s/d/l/i/L/h] [SOURCE:TARGET] [TEXT]\n"
@@ -1450,7 +1477,7 @@ __help(const char name[])
 
 
 static void
-__load_default(char *type, const Lang *langs[2])
+moetr_load_default_opts(char *type, const Lang *langs[2])
 {
 	if (CONFIG_BUFFER_SIZE > CONFIG_BUFFER_MAX_SIZE) {
 		fprintf(stderr, COLOR_REGULAR_YELLOW("config: invalid buffer size!") "\n");
@@ -1491,7 +1518,7 @@ main(int argc, char *argv[])
 	MoeTr moe;
 
 
-	__load_default(&result_type, langs);
+	moetr_load_default_opts(&result_type, langs);
 	if (moetr_init(&moe, result_type, langs) < 0)
 		return ret;
 
@@ -1527,7 +1554,7 @@ main(int argc, char *argv[])
 			ret = EXIT_SUCCESS;
 			goto out0;
 		case 'h':
-			__help(argv[0]);
+			moetr_help(argv[0]);
 			ret = EXIT_SUCCESS;
 			goto out0;
 		default:
@@ -1555,7 +1582,7 @@ main(int argc, char *argv[])
 out0:
 	if (ret == EXIT_FAILURE) {
 		fprintf(stderr, COLOR_REGULAR_YELLOW("Error: invalid argument!") "\n\n");
-		__help(argv[0]);
+		moetr_help(argv[0]);
 	}
 
 out1:
