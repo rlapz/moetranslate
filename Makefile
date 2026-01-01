@@ -12,12 +12,22 @@ VERSION   = 0.9.0
 PREFIX    = /usr
 CC        = cc
 CFLAGS    = -std=c99 -Wall -Wextra -pedantic -D_POSIX_C_SOURCE=200809L -O3
+LFLAGS    = -lreadline
 
 SRC       = moetranslate.c
 OBJ       = $(SRC:.c=.o)
 
 FILE_DIST = README.md LICENSE Makefile moetranslate.c config.def.h json.h
 # ------------------------------------------------------------------- #
+
+
+WNO_INTERACTIVE_MODE ?= 0
+
+ifeq ($(WNO_INTERACTIVE_MODE), 1)
+	CFLAGS += -DWNO_INTERACTIVE_MODE
+	LFLAGS =
+endif
+
 
 all: options $(TARGET)
 
@@ -32,7 +42,7 @@ moetranslate.o: $(TARGET).c
 
 $(TARGET): $(OBJ)
 	@printf "\n%s\n" "Linking: $(^)..."
-	$(CC) -o $(@) $(^) -lreadline
+	$(CC) -o $(@) $(^) $(LFLAGS)
 # ------------------------------------------------------------------- #
 
 options:

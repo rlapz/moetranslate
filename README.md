@@ -10,13 +10,20 @@ A simple language translator written in C
 ## Required Package(s):
 
 ```
-readline
+readline (for interactive input mode)
 ```
 
 ## How to Install:
 
 ```
 make install
+```
+
+or without interactive input mode
+
+
+```
+make install -DWNO_INTERACTIVE_MODE=1
 ```
 
 ## How to Uninstall:

@@ -19,8 +19,10 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#ifndef WNO_INTERACTIVE_MODE
 #include <readline/readline.h>
 #include <readline/history.h>
+#endif
 
 #include "json.h"
 #include "config.h"
@@ -212,7 +214,7 @@ static int  moetr_translate(MoeTr *m, const char text[]);
 static void moetr_interactive_banner(const MoeTr *m);
 static void moetr_interactive_help(void);
 static int  moetr_interactive_parse(char *cmd[]);
-static void moetr_set_prompt(MoeTr *m);
+static void moetr_interactive_set_prompt(MoeTr *m);
 static void moetr_interactive(MoeTr *m, const char text[]);
 static void moetr_help(const char name[]);
 static void moetr_load_default_opts(char *type, const Lang *langs[2]);
@@ -1380,7 +1382,7 @@ moetr_interactive_parse(char *cmd[])
 
 
 static void
-moetr_set_prompt(MoeTr *m)
+moetr_interactive_set_prompt(MoeTr *m)
 {
 	snprintf(m->prompt, sizeof(m->prompt), COLOR_BOLD_WHITE("[%s:%s][%s]->") " ",
 		 m->langs[0]->key, m->langs[1]->key, result_type_str[m->result_type][0]);
@@ -1390,9 +1392,19 @@ moetr_set_prompt(MoeTr *m)
 static void
 moetr_interactive(MoeTr *m, const char text[])
 {
+#ifdef WNO_INTERACTIVE_MODE
+	puts("Interactive input mode: Not supported!\nPlease rebuild without \"-DWNO_INTERACTIVE_MODE\" flag");
+
+	(void)m;
+	(void)text;
+	(void)moetr_interactive_banner;
+	(void)moetr_interactive_help;
+	(void)moetr_interactive_parse;
+	(void)moetr_interactive_set_prompt;
+#else
 	setlocale(LC_CTYPE, "");
 	stifle_history(CONFIG_INTERACTIVE_HISTORY_SIZE);
-	moetr_set_prompt(m);
+	moetr_interactive_set_prompt(m);
 	moetr_interactive_banner(m);
 
 	if (text != NULL)
@@ -1413,13 +1425,13 @@ moetr_interactive(MoeTr *m, const char text[])
 			break;
 		case MOETR_INTR_CODE_CHANGE_LANGS:
 			if (moetr_set_langs(m, cmd) == 0)
-				moetr_set_prompt(m);
+				moetr_interactive_set_prompt(m);
 
 			cmd = res;
 			break;
 		case MOETR_INTR_CODE_CHANGE_RESTYPE:
 			if (moetr_set_result_type(m, *cmd) == 0)
-				moetr_set_prompt(m);
+				moetr_interactive_set_prompt(m);
 
 			cmd = res;
 			break;
@@ -1445,6 +1457,7 @@ moetr_interactive(MoeTr *m, const char text[])
 
 		free(res);
 	}
+#endif
 }
 
 
